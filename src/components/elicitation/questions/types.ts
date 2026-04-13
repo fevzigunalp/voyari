@@ -67,3 +67,15 @@ export interface VisaValue {
   nationality: string;
   passportValid: boolean;
 }
+
+/**
+ * Structured value produced by the redesigned InterestCloud.
+ * Re-exported from @/lib/interests/types as the canonical source.
+ */
+export type { InterestsValue } from "@/lib/interests/types";
+
+/**
+ * Legacy interests value shape (plain TR string[]).
+ * Retained for answer-migration code paths only.
+ */
+export type LegacyInterestsValue = string[];

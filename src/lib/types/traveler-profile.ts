@@ -123,6 +123,13 @@ export interface TravelerProfile {
 
   preferences: {
     profileType: TravelProfileType;
+    /**
+     * Flattened string[] projection of the structured interests answer.
+     * Downstream AI prompts and scoring consume this shape. The full
+     * structured object lives in the elicitation store under
+     * `answers.interests` and is flattened via
+     * `@/lib/interests/normalize#flattenForAi`.
+     */
     interests: string[];
     pace: PaceType;
     food: {

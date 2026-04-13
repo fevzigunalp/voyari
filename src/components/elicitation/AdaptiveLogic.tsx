@@ -1,5 +1,7 @@
 import type { QuestionId } from "@/lib/types/questions";
 import { QUESTION_FLOW } from "@/lib/constants/question-flow";
+import { flattenForAi } from "@/lib/interests/normalize";
+import type { InterestsValue } from "@/lib/interests/types";
 import { determineProfileType, type AnswersMap } from "./ProfileBuilder";
 
 /**
@@ -18,7 +20,11 @@ export function buildQuestionFlow(answers: AnswersMap): QuestionId[] {
 
   flow.push(...QUESTION_FLOW.secondary);
 
-  const interests = answers.interests as string[] | undefined;
+  const interestsRaw = answers.interests as
+    | InterestsValue
+    | string[]
+    | undefined;
+  const interests = flattenForAi(interestsRaw);
   // Only branch on profile when secondary answers (interests/budget/travelers) exist.
   if (interests && interests.length > 0) {
     const profile = determineProfileType(answers);

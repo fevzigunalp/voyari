@@ -32,6 +32,9 @@ export const metadata: Metadata = {
   description: siteDescription,
   applicationName: "Voyari",
   authors: [{ name: "Ocianix" }],
+  alternates: {
+    canonical: "/",
+  },
   keywords: [
     "Voyari",
     "tatil planlayıcı",
@@ -56,6 +59,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: "Voyari — Hayalinizdeki Tatili Tasarlayalım",
+        type: "image/svg+xml",
       },
     ],
   },
@@ -63,7 +67,12 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Voyari — Hayalinizdeki Tatili Tasarlayalım",
     description: siteDescription,
-    images: ["/og-image.svg"],
+    images: [
+      {
+        url: "/og-image.svg",
+        alt: "Voyari — Hayalinizdeki Tatili Tasarlayalım",
+      },
+    ],
   },
   icons: {
     icon: [

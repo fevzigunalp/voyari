@@ -42,12 +42,18 @@ import type {
   DepartureValue,
   DestinationValue,
   FoodValue,
+  InterestsValue,
   PaceValue,
   TransportValue,
   TravelersValue,
   VehicleValue,
   VisaValue,
 } from "./questions/types";
+import {
+  flattenForAi,
+  hasMinimumSelection,
+  toInterestsValue,
+} from "@/lib/interests/normalize";
 
 const TransitStopsQ = makeBoolChoice(
   "Evet, ara ülkelerde durmak isterim",
@@ -266,7 +272,11 @@ function QuestionRenderer({ id, value, onChange }: QuestionRendererProps) {
     case "interests":
       return (
         <InterestCloud
-          value={value as string[] | undefined}
+          value={
+            value === undefined
+              ? undefined
+              : toInterestsValue(value)
+          }
           onChange={(v) => onChange(v)}
         />
       );
@@ -366,6 +376,9 @@ function isAnswered(id: QuestionId, value: unknown): boolean {
   if (typeof value === "boolean") return true;
   if (typeof value === "object") {
     const v = value as Record<string, unknown>;
+    if (id === "interests") {
+      return hasMinimumSelection(toInterestsValue(value));
+    }
     if (id === "destination") {
       const dv = v as unknown as DestinationValue;
       return dv.flexible || (dv.query ?? "").trim().length > 0;
@@ -390,7 +403,11 @@ function buildProfile(
   const transport = answers.transport as TransportValue | undefined;
   const vehicle = answers.vehicleInfo as VehicleValue | undefined;
   const accommodation = answers.accommodation as AccommodationValue | undefined;
-  const interests = (answers.interests as string[] | undefined) ?? [];
+  const interestsRaw = answers.interests as
+    | InterestsValue
+    | string[]
+    | undefined;
+  const interests = flattenForAi(interestsRaw);
   const pace = answers.pace as PaceValue | undefined;
   const food = answers.food as FoodValue | undefined;
   const transitStops = answers.transitStops as boolean | undefined;

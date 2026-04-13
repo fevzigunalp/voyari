@@ -2,6 +2,8 @@ import type {
   TravelProfileType,
   TravelerProfile,
 } from "@/lib/types/traveler-profile";
+import { flattenForAi } from "@/lib/interests/normalize";
+import type { InterestsValue } from "@/lib/interests/types";
 
 export type AnswersMap = Record<string, unknown>;
 
@@ -49,7 +51,11 @@ export function determineProfileType(answers: AnswersMap): TravelProfileType {
   const transport = (answers.transport as TransportAnswer | undefined) ?? {};
   const budget = (answers.budget as BudgetAnswer | undefined) ?? {};
   const travelers = (answers.travelers as TravelersAnswer | undefined) ?? {};
-  const interests = (answers.interests as string[] | undefined) ?? [];
+  const interestsRaw = answers.interests as
+    | InterestsValue
+    | string[]
+    | undefined;
+  const interests = flattenForAi(interestsRaw);
 
   // Transport weighting
   if (transport.type === "gulet") scores.luxury_sea += 10;
