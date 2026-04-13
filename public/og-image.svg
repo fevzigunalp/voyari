@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0A0E1A"/>
+      <stop offset="55%" stop-color="#141B31"/>
+      <stop offset="100%" stop-color="#0A0E1A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#D4A853" stop-opacity="0.35"/>
+      <stop offset="70%" stop-color="#D4A853" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F3D98B"/>
+      <stop offset="55%" stop-color="#D4A853"/>
+      <stop offset="100%" stop-color="#B8862F"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="240" cy="180" r="340" fill="url(#glow)"/>
+  <circle cx="960" cy="500" r="320" fill="url(#glow)" opacity="0.6"/>
+
+  <g transform="translate(100,140)">
+    <g transform="translate(0,40)">
+      <circle cx="70" cy="70" r="64" stroke="url(#gold)" stroke-width="2.5"/>
+      <circle cx="70" cy="70" r="44" stroke="url(#gold)" stroke-width="1" opacity="0.5"/>
+      <path d="M70 10 L78 62 L70 58 L62 62 Z" fill="url(#gold)"/>
+      <path d="M70 130 L62 78 L70 82 L78 78 Z" fill="url(#gold)" opacity="0.5"/>
+      <path d="M46 50 L70 102 L94 50" stroke="#0A0E1A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M46 50 L70 102 L94 50" stroke="url(#gold)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+    </g>
+    <text x="170" y="130" font-family="'Playfair Display', 'Times New Roman', serif" font-size="84" font-weight="600" fill="url(#gold)">Voyari</text>
+    <text x="172" y="172" font-family="'Courier New', monospace" font-size="20" letter-spacing="6" fill="#9CA3AF">AI TRAVEL ARCHITECT</text>
+  </g>
+
+  <text x="100" y="430" font-family="'Playfair Display', 'Times New Roman', serif" font-size="76" font-weight="600" fill="#F5F5F5">Hayalinizdeki Tatili</text>
+  <text x="100" y="510" font-family="'Playfair Display', 'Times New Roman', serif" font-size="76" font-weight="600" fill="url(#gold)">Tasarlayalım</text>
+
+  <text x="100" y="570" font-family="'Inter', 'Arial', sans-serif" font-size="22" fill="#9CA3AF">Gulet · Road trip · Karavan · Cruise · Kültür · Wellness</text>
+  <text x="1100" y="590" text-anchor="end" font-family="'Courier New', monospace" font-size="16" letter-spacing="4" fill="#6B7280">OCIANIX · 2026</text>
+</svg>

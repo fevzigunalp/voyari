@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none" role="img" aria-label="Voyari">
+  <defs>
+    <linearGradient id="vgW" x1="0" y1="0" x2="280" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F3D98B"/>
+      <stop offset="50%" stop-color="#D4A853"/>
+      <stop offset="100%" stop-color="#B8862F"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0,0)">
+    <circle cx="32" cy="32" r="28" stroke="url(#vgW)" stroke-width="1.6" opacity="0.95"/>
+    <circle cx="32" cy="32" r="20" stroke="url(#vgW)" stroke-width="0.7" opacity="0.45"/>
+    <path d="M32 6 L36 30 L32 28 L28 30 Z" fill="url(#vgW)"/>
+    <path d="M32 58 L28 34 L32 36 L36 34 Z" fill="url(#vgW)" opacity="0.45"/>
+    <path d="M6 32 L30 28 L28 32 L30 36 Z" fill="url(#vgW)" opacity="0.55"/>
+    <path d="M58 32 L34 36 L36 32 L34 28 Z" fill="url(#vgW)" opacity="0.55"/>
+    <path d="M22 24 L32 44 L42 24" stroke="#0A0E1A" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M22 24 L32 44 L42 24" stroke="url(#vgW)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.85"/>
+    <circle cx="32" cy="32" r="2.2" fill="#0A0E1A" stroke="url(#vgW)" stroke-width="0.8"/>
+  </g>
+  <text x="78" y="42" font-family="'Playfair Display', 'Times New Roman', serif" font-size="36" font-weight="600" letter-spacing="1" fill="url(#vgW)">Voyari</text>
+</svg>
