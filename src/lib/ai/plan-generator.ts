@@ -1,10 +1,32 @@
-import type Anthropic from "@anthropic-ai/sdk";
+/**
+ * Plan generator — multi-provider orchestrated.
+ *
+ * - Each research agent runs through generateObject() → provider with fallback.
+ * - Independent agents run in parallel; budget runs after with prior results.
+ * - Synthesizer validates against TravelPlanSchema (lax) then coerces to TravelPlan.
+ *
+ * NDJSON stream shape from /api/research is preserved. The `snippet` on `done`
+ * events now includes which provider answered (optional, additive field inside
+ * an existing string — does not break the UI contract).
+ */
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import type { TravelPlan } from "@/lib/types/plan";
 import type { ResearchAgentId } from "@/lib/types/research";
-import { AI_MODEL, extractText, getClient, safeParseJson } from "./client";
 import { AGENTS, type ResearchAgentDef } from "./research-agents";
 import { PLAN_SYNTHESIZER_PROMPT } from "./prompts/plan-synthesizer";
+import { generateObject } from "./provider";
+import {
+  RouteAgentSchema,
+  WeatherAgentSchema,
+  AccommodationAgentSchema,
+  RestaurantAgentSchema,
+  ActivityAgentSchema,
+  LogisticsAgentSchema,
+  BudgetAgentSchema,
+  TravelPlanSchema,
+} from "./schema";
+import { normalizePlan } from "./normalize";
+import type { ZodType } from "zod";
 
 export type ResearchResults = Partial<Record<ResearchAgentId, unknown>>;
 
@@ -16,53 +38,34 @@ export interface AgentUpdate {
   snippet?: string;
   error?: string;
   data?: unknown;
+  provider?: string;
 }
 
-type Block = { type: string; text?: string };
-
-interface CreateMessageParams {
-  model: string;
-  max_tokens: number;
-  system: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  tools?: Array<Record<string, unknown>>;
-}
+const AGENT_SCHEMAS: Record<ResearchAgentId, ZodType<Record<string, unknown>>> = {
+  route: RouteAgentSchema,
+  weather: WeatherAgentSchema,
+  accommodation: AccommodationAgentSchema,
+  restaurant: RestaurantAgentSchema,
+  activity: ActivityAgentSchema,
+  logistics: LogisticsAgentSchema,
+  budget: BudgetAgentSchema,
+};
 
 async function callAgent(
-  client: Anthropic,
   agent: ResearchAgentDef,
   userMessage: string,
-): Promise<{ text: string; parsed: unknown }> {
-  const params: CreateMessageParams = {
-    model: AI_MODEL,
-    max_tokens: 8000,
-    system: agent.systemPrompt,
-    messages: [{ role: "user", content: userMessage }],
-  };
-
-  if (agent.useWebSearch) {
-    params.tools = [
-      {
-        type: "web_search_20250305",
-        name: "web_search",
-        max_uses: 5,
-      },
-    ];
-  }
-
-  // Cast to SDK's expected MessageCreateParams shape.
-  const msg = await client.messages.create(
-    params as unknown as Parameters<typeof client.messages.create>[0],
+): Promise<{ data: unknown; provider: string }> {
+  const schema = AGENT_SCHEMAS[agent.id];
+  const result = await generateObject(
+    {
+      system: agent.systemPrompt,
+      user: userMessage,
+      webSearch: agent.useWebSearch,
+      maxTokens: 8000,
+    },
+    schema,
   );
-
-  const content = (msg as { content?: Block[] }).content ?? [];
-  const text = extractText(content);
-  const parsed = safeParseJson(text);
-  if (!parsed.ok) {
-    // Provide a best-effort empty object so pipeline continues.
-    return { text, parsed: { error: parsed.error, raw: text.slice(0, 400) } };
-  }
-  return { text, parsed: parsed.data };
+  return { data: result.data, provider: result.provider };
 }
 
 /**
@@ -72,18 +75,15 @@ export async function runResearch(
   profile: TravelerProfile,
   onAgentUpdate?: (u: AgentUpdate) => void,
 ): Promise<ResearchResults> {
-  const client = getClient();
   const results: ResearchResults = {};
 
   const independent = AGENTS.filter((a) => !a.dependsOnOthers);
   const dependent = AGENTS.filter((a) => a.dependsOnOthers);
 
-  // Emit pending for all
   for (const a of AGENTS) {
     onAgentUpdate?.({ agent: a.id, status: "pending" });
   }
 
-  // Run independent agents in parallel
   await Promise.all(
     independent.map(async (agent) => {
       onAgentUpdate?.({
@@ -93,23 +93,25 @@ export async function runResearch(
       });
       try {
         const input = agent.inputBuilder(profile);
-        const { parsed } = await callAgent(client, agent, input);
-        results[agent.id] = parsed;
+        const { data, provider } = await callAgent(agent, input);
+        results[agent.id] = data;
         onAgentUpdate?.({
           agent: agent.id,
           status: "done",
-          snippet: `${agent.label} tamamlandı`,
-          data: parsed,
+          snippet: `${agent.label} tamamlandı (${provider})`,
+          data,
+          provider,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
-        results[agent.id] = { error: msg };
-        onAgentUpdate?.({ agent: agent.id, status: "error", error: msg });
+        // Never leak raw provider details to client; log server-side.
+        console.error(`[voyari.ai] agent=${agent.id} failed`, err);
+        const safeMsg = "AI hizmeti geçici olarak kullanılamıyor";
+        results[agent.id] = { error: safeMsg };
+        onAgentUpdate?.({ agent: agent.id, status: "error", error: safeMsg });
       }
     }),
   );
 
-  // Run dependent agents sequentially after independent finish
   for (const agent of dependent) {
     onAgentUpdate?.({
       agent: agent.id,
@@ -118,18 +120,20 @@ export async function runResearch(
     });
     try {
       const input = agent.inputBuilder(profile, results);
-      const { parsed } = await callAgent(client, agent, input);
-      results[agent.id] = parsed;
+      const { data, provider } = await callAgent(agent, input);
+      results[agent.id] = data;
       onAgentUpdate?.({
         agent: agent.id,
         status: "done",
-        snippet: `${agent.label} tamamlandı`,
-        data: parsed,
+        snippet: `${agent.label} tamamlandı (${provider})`,
+        data,
+        provider,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
-      results[agent.id] = { error: msg };
-      onAgentUpdate?.({ agent: agent.id, status: "error", error: msg });
+      console.error(`[voyari.ai] agent=${agent.id} failed`, err);
+      const safeMsg = "AI hizmeti geçici olarak kullanılamıyor";
+      results[agent.id] = { error: safeMsg };
+      onAgentUpdate?.({ agent: agent.id, status: "error", error: safeMsg });
     }
   }
 
@@ -137,13 +141,12 @@ export async function runResearch(
 }
 
 /**
- * Synthesizer call — takes research and produces a TravelPlan-shaped object.
+ * Synthesizer — produces a TravelPlan from profile + research results.
  */
 export async function synthesizePlan(
   profile: TravelerProfile,
   research: ResearchResults,
 ): Promise<TravelPlan> {
-  const client = getClient();
   const userMessage = `Aşağıdaki TravelerProfile ve research sonuçlarını kullanarak TravelPlan JSON'unu oluştur.
 
 === PROFILE ===
@@ -155,25 +158,20 @@ ${JSON.stringify(research, null, 2).slice(0, 40000)}
 id için "plan_${Date.now()}" kullan. createdAt için şimdiki ISO tarih.
 Yalnızca geçerli JSON döndür.`;
 
-  const params: CreateMessageParams = {
-    model: AI_MODEL,
-    max_tokens: 16000,
-    system: PLAN_SYNTHESIZER_PROMPT,
-    messages: [{ role: "user", content: userMessage }],
-  };
-
-  const msg = await client.messages.create(
-    params as unknown as Parameters<typeof client.messages.create>[0],
+  const result = await generateObject(
+    {
+      system: PLAN_SYNTHESIZER_PROMPT,
+      user: userMessage,
+      webSearch: false,
+      maxTokens: 16000,
+      timeoutMs: 120_000,
+    },
+    TravelPlanSchema,
   );
-  const content = (msg as { content?: Block[] }).content ?? [];
-  const text = extractText(content);
-  const parsed = safeParseJson(text);
-  if (!parsed.ok) {
-    throw new Error(`Plan sentezleyici JSON parse hatası: ${parsed.error}`);
-  }
-  const plan = parsed.data as TravelPlan;
-  if (!plan.id) plan.id = `plan_${Date.now()}`;
-  if (!plan.createdAt) plan.createdAt = new Date().toISOString();
-  if (!plan.profile) plan.profile = profile;
-  return plan;
+
+  const normalized = normalizePlan(result.data) as unknown as TravelPlan;
+  if (!normalized.id) normalized.id = `plan_${Date.now()}`;
+  if (!normalized.createdAt) normalized.createdAt = new Date().toISOString();
+  if (!normalized.profile) normalized.profile = profile;
+  return normalized;
 }

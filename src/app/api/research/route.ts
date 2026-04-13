@@ -42,8 +42,11 @@ export async function POST(req: NextRequest) {
         });
         send({ type: "research-complete", research });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Bilinmeyen hata";
-        send({ type: "error", error: message });
+        console.error("[voyari.ai] /api/research stream failed", err);
+        send({
+          type: "error",
+          error: "AI hizmeti geçici olarak kullanılamıyor",
+        });
       } finally {
         controller.close();
       }

@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
     plan.createdAt = new Date().toISOString();
     return Response.json({ plan });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Bilinmeyen hata";
-    return Response.json({ error: message }, { status: 500 });
+    console.error("[voyari.ai] /api/generate-plan failed", err);
+    return Response.json(
+      { error: "AI hizmeti geçici olarak kullanılamıyor" },
+      { status: 503 },
+    );
   }
 }
