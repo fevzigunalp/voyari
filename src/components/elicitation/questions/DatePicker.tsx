@@ -49,37 +49,40 @@ export function DatePicker({
   const [anchor, setAnchor] = useState<Date>(() =>
     value?.startDate ? parseISO(value.startDate) : today,
   );
+  const [pendingStart, setPendingStart] = useState<Date | null>(null);
 
-  const start = value?.startDate ? parseISO(value.startDate) : null;
-  const end = value?.endDate ? parseISO(value.endDate) : null;
+  const hasRange =
+    !!value?.startDate &&
+    !!value?.endDate &&
+    value.startDate !== value.endDate;
+  const start = hasRange && value?.startDate ? parseISO(value.startDate) : null;
+  const end = hasRange && value?.endDate ? parseISO(value.endDate) : null;
+  const effectiveStart = start ?? pendingStart;
 
   const grid = useMemo(() => buildMonthGrid(anchor), [anchor]);
 
   const handlePick = (d: Date) => {
     if (isBefore(d, addDays(today, -1))) return;
-    if (!start || (start && end)) {
-      onChange({
-        startDate: format(d, "yyyy-MM-dd"),
-        endDate: format(d, "yyyy-MM-dd"),
-        totalDays: 1,
-      });
+
+    // No start yet, or a completed range exists → begin new selection
+    if (!pendingStart && !hasRange) {
+      setPendingStart(d);
       return;
     }
-    if (start && !end) {
-      if (isBefore(d, start)) {
-        onChange({
-          startDate: format(d, "yyyy-MM-dd"),
-          endDate: format(start, "yyyy-MM-dd"),
-          totalDays: differenceInCalendarDays(start, d) + 1,
-        });
-      } else {
-        onChange({
-          startDate: format(start, "yyyy-MM-dd"),
-          endDate: format(d, "yyyy-MM-dd"),
-          totalDays: differenceInCalendarDays(d, start) + 1,
-        });
-      }
+    if (hasRange) {
+      setPendingStart(d);
+      return;
     }
+
+    // Second click: finalize range using pendingStart
+    const first = pendingStart!;
+    const [s, e] = isBefore(d, first) ? [d, first] : [first, d];
+    onChange({
+      startDate: format(s, "yyyy-MM-dd"),
+      endDate: format(e, "yyyy-MM-dd"),
+      totalDays: differenceInCalendarDays(e, s) + 1,
+    });
+    setPendingStart(null);
   };
 
   return (
@@ -121,7 +124,7 @@ export function DatePicker({
         {grid.map((d) => {
           const inMonth = isSameMonth(d, anchor);
           const past = isBefore(d, addDays(today, -1));
-          const isStart = start ? isSameDay(d, start) : false;
+          const isStart = effectiveStart ? isSameDay(d, effectiveStart) : false;
           const isEnd = end ? isSameDay(d, end) : false;
           const inRange =
             start && end ? !isBefore(d, start) && !isAfter(d, end) : false;
@@ -147,7 +150,13 @@ export function DatePicker({
         })}
       </div>
 
-      {value && (
+      {pendingStart && !hasRange && (
+        <div className="mt-4 text-center text-sm text-[#E8C97A]">
+          Şimdi <strong>dönüş tarihini</strong> seçin
+        </div>
+      )}
+
+      {hasRange && value && (
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3">
             <div className="text-[10px] uppercase tracking-[0.22em] text-text-muted font-mono">
