@@ -3,7 +3,7 @@ import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { AI_MODEL, extractText, getClient, safeParseJson } from "@/lib/ai/client";
 import { getAgent } from "@/lib/ai/research-agents";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const maxDuration = 60;
 
 interface RequestBody {

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { runResearch, type AgentUpdate } from "@/lib/ai/plan-generator";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
