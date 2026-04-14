@@ -31,6 +31,30 @@ export interface CallOptions {
   maxTokens?: number;
   /** Override the global primary provider for this single call. */
   overridePrimary?: ProviderName;
+  /**
+   * Optional callback to observe attempt lifecycle events from the orchestrator.
+   * Fires on: start of each attempt, retry on same provider, fallback triggered,
+   * and final success. Does not fire on terminal exhaustion (caller handles).
+   */
+  onAttempt?: (ev: AttemptEvent) => void;
+  /**
+   * Optional upper bound on retries on the primary provider. Must be <= the
+   * global AI_MAX_RETRIES; values greater than the env cap are clamped down.
+   * If omitted the env default is used.
+   */
+  maxRetriesOverride?: number;
+}
+
+export type AttemptPhase =
+  | "start"
+  | "retry"
+  | "fallback_triggered"
+  | "success";
+
+export interface AttemptEvent {
+  provider: ProviderName;
+  phase: AttemptPhase;
+  attempt: number;
 }
 
 export interface CallResult<T> {

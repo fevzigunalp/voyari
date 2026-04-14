@@ -130,10 +130,16 @@ async function runWithRetry<T>(
   opts: CallOptions,
   schema: ZodType<T>,
 ): Promise<CallResult<T>> {
-  const retries = maxRetries();
+  const envCap = maxRetries();
+  const requested =
+    typeof opts.maxRetriesOverride === "number" && opts.maxRetriesOverride >= 0
+      ? opts.maxRetriesOverride
+      : envCap;
+  const retries = Math.min(requested, envCap);
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     logAi({ phase: "start", provider, attempt });
+    opts.onAttempt?.({ provider, phase: "start", attempt });
     try {
       const result = await callOnce(provider, opts, schema);
       logAi({
@@ -143,6 +149,7 @@ async function runWithRetry<T>(
         durationMs: result.durationMs,
         repaired: result.repaired,
       });
+      opts.onAttempt?.({ provider, phase: "success", attempt });
       return result;
     } catch (err) {
       lastErr = err;
@@ -158,6 +165,7 @@ async function runWithRetry<T>(
       if (attempt < retries && isRetryableProviderError(err)) {
         const wait = backoffMs(attempt);
         logAi({ phase: "retry", provider, attempt: attempt + 1, backoffMs: wait });
+        opts.onAttempt?.({ provider, phase: "retry", attempt: attempt + 1 });
         await new Promise((r) => setTimeout(r, wait));
         continue;
       }
@@ -202,6 +210,7 @@ export async function generateObject<T>(
   }
 
   logAi({ phase: "fallback_triggered", provider: fallback });
+  opts.onAttempt?.({ provider: fallback, phase: "fallback_triggered", attempt: 0 });
   providersTried.push(fallback);
   try {
     return await runWithRetry(fallback, opts, schema);

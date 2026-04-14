@@ -15,7 +15,7 @@ import { AGENTS, type ResearchAgentDef } from "./research-agents";
 import { PLAN_SYNTHESIZER_PROMPT } from "./prompts/plan-synthesizer";
 import { generateObject, logAi, isExhaustedError } from "./provider";
 import { createLimiter } from "./limit";
-import { preferredPrimary } from "./agent-routing";
+import { preferredPrimary, getRetryPolicy } from "./agent-routing";
 import { safeFallbackFor, isPartial } from "./safe-fallbacks";
 import {
   RouteAgentSchema,
@@ -29,11 +29,18 @@ import {
 } from "./schema";
 import { normalizePlan } from "./normalize";
 import type { ZodType } from "zod";
-import type { ProviderName } from "./types";
+import type { ProviderName, AttemptEvent } from "./types";
 
 export type ResearchResults = Partial<Record<ResearchAgentId, unknown>>;
 
-export type AgentStatus = "pending" | "running" | "done" | "error";
+export type AgentStatus =
+  | "pending"
+  | "running"
+  | "retrying"
+  | "fallback_running"
+  | "done"
+  | "partial"
+  | "failed";
 
 export type AgentErrorCode =
   | "provider_exhausted"
@@ -75,9 +82,11 @@ function classifyError(err: unknown): AgentErrorCode {
 async function callAgent(
   agent: ResearchAgentDef,
   userMessage: string,
+  onAttempt?: (ev: AttemptEvent) => void,
 ): Promise<{ data: unknown; provider: string }> {
   const schema = AGENT_SCHEMAS[agent.id];
   const pref = preferredPrimary(agent.id);
+  const policy = getRetryPolicy(agent.id);
   const overridePrimary: ProviderName | undefined =
     pref === "auto" ? undefined : pref;
   const result = await generateObject(
@@ -86,8 +95,10 @@ async function callAgent(
       user: userMessage,
       webSearch: agent.useWebSearch,
       maxTokens: 8000,
+      maxRetriesOverride: policy.immediateRetries,
       ...(agent.timeoutMs ? { timeoutMs: agent.timeoutMs } : {}),
       ...(overridePrimary ? { overridePrimary } : {}),
+      ...(onAttempt ? { onAttempt } : {}),
     },
     schema,
   );
@@ -102,21 +113,48 @@ interface AgentRunOutcome {
   errorMessage?: string;
 }
 
-async function runAgentSafely(
+export async function runAgentSafely(
   agent: ResearchAgentDef,
   input: string,
+  onAttempt?: (ev: AttemptEvent) => void,
 ): Promise<AgentRunOutcome> {
   const pref = preferredPrimary(agent.id);
   logAi({
     phase: "start",
     message: `agent=${agent.id} preferred=${pref}`,
   });
+  let sawFirstFailure = false;
+  const wrappedAttempt = (ev: AttemptEvent) => {
+    if (ev.phase === "retry") {
+      if (!sawFirstFailure) {
+        sawFirstFailure = true;
+        logAi({
+          phase: "error",
+          provider: ev.provider,
+          message: `agent=${agent.id} event=first_failure`,
+        });
+      }
+      logAi({
+        phase: "retry",
+        provider: ev.provider,
+        attempt: ev.attempt,
+        message: `agent=${agent.id} event=retry_started`,
+      });
+    } else if (ev.phase === "fallback_triggered") {
+      logAi({
+        phase: "fallback_triggered",
+        provider: ev.provider,
+        message: `agent=${agent.id} event=fallback_started`,
+      });
+    }
+    onAttempt?.(ev);
+  };
   try {
-    const { data, provider } = await callAgent(agent, input);
+    const { data, provider } = await callAgent(agent, input, wrappedAttempt);
     logAi({
       phase: "success",
       provider: provider as ProviderName,
-      message: `agent=${agent.id} outcome=success`,
+      message: `agent=${agent.id} event=final_state outcome=success`,
     });
     return { data, provider, partial: false };
   } catch (err) {
@@ -125,7 +163,7 @@ async function runAgentSafely(
     console.error(`[voyari.ai] agent=${agent.id} failed code=${code}`, message);
     logAi({
       phase: "exhausted",
-      message: `agent=${agent.id} outcome=fallback code=${code} partial=true`,
+      message: `agent=${agent.id} event=final_state outcome=fallback code=${code} partial=true`,
     });
     return {
       data: safeFallbackFor(agent.id),
@@ -159,6 +197,30 @@ export async function runResearch(
   );
   const limit = createLimiter(concurrency);
 
+  const makeAttemptHandler = (agent: ResearchAgentDef) => {
+    let fallbackSignaled = false;
+    return (ev: AttemptEvent) => {
+      if (ev.phase === "retry") {
+        onAgentUpdate?.({
+          agent: agent.id,
+          status: "retrying",
+          snippet: "Yeniden deneniyor...",
+          provider: ev.provider,
+        });
+      } else if (ev.phase === "fallback_triggered") {
+        fallbackSignaled = true;
+        onAgentUpdate?.({
+          agent: agent.id,
+          status: "fallback_running",
+          snippet: "Yedek sağlayıcı deneniyor...",
+          provider: ev.provider,
+        });
+      } else if (ev.phase === "start" && fallbackSignaled && ev.attempt === 0) {
+        // first call on fallback provider after fallback_triggered — already announced
+      }
+    };
+  };
+
   await Promise.all(
     independent.map((agent) =>
       limit(async () => {
@@ -168,12 +230,17 @@ export async function runResearch(
           snippet: `${agent.label} araştırma başlıyor...`,
         });
         const input = agent.inputBuilder(profile);
-        const outcome = await runAgentSafely(agent, input);
+        const outcome = await runAgentSafely(
+          agent,
+          input,
+          makeAttemptHandler(agent),
+        );
         results[agent.id] = outcome.data;
         if (outcome.partial) {
           onAgentUpdate?.({
             agent: agent.id,
-            status: "error",
+            status: "partial",
+            snippet: "Kısmi sonuç — arka planda tekrar denenecek",
             error: outcome.errorMessage,
             errorCode: outcome.errorCode,
             data: outcome.data,
@@ -199,12 +266,17 @@ export async function runResearch(
       snippet: `${agent.label} hesaplanıyor...`,
     });
     const input = agent.inputBuilder(profile, results);
-    const outcome = await runAgentSafely(agent, input);
+    const outcome = await runAgentSafely(
+      agent,
+      input,
+      makeAttemptHandler(agent),
+    );
     results[agent.id] = outcome.data;
     if (outcome.partial) {
       onAgentUpdate?.({
         agent: agent.id,
-        status: "error",
+        status: "partial",
+        snippet: "Kısmi sonuç — arka planda tekrar denenecek",
         error: outcome.errorMessage,
         errorCode: outcome.errorCode,
         data: outcome.data,

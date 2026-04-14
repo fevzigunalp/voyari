@@ -13,6 +13,7 @@ interface TravelStoreState {
   plan: TravelPlan | null;
   setProfile: (patch: Partial<TravelerProfile>) => void;
   setResearch: (r: ResearchBundle) => void;
+  updateResearchAgent: (id: ResearchAgentId, data: unknown) => void;
   setPlan: (p: TravelPlan) => void;
   resetProfile: () => void;
   resetAll: () => void;
@@ -25,6 +26,10 @@ export const useTravelStore = create<TravelStoreState>((set) => ({
   setProfile: (patch) =>
     set((state) => ({ profile: { ...state.profile, ...patch } })),
   setResearch: (r) => set({ research: r }),
+  updateResearchAgent: (id, data) =>
+    set((state) => ({
+      research: { ...(state.research ?? {}), [id]: data },
+    })),
   setPlan: (p) => set({ plan: p }),
   resetProfile: () => set({ profile: {} }),
   resetAll: () => set({ profile: {}, research: null, plan: null }),
