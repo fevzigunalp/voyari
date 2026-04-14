@@ -70,6 +70,31 @@ export interface AgentUpdate {
   data?: unknown;
   provider?: string;
   partial?: boolean;
+  phase?: 1 | 2 | 3;
+}
+
+/**
+ * PHASED ORCHESTRATION
+ *
+ * Phase 1 — Foundation (sequential blocking): route → logistics
+ *   These are prerequisites; every later phase uses their data.
+ * Phase 2 — Content (bounded parallel after Phase 1): accommodation, activity, restaurant
+ *   May overlap but capped by AI_MAX_CONCURRENCY; only starts once Phase 1
+ *   reaches a usable state (done or safe-fallback).
+ * Phase 3 — Enrichment (sequential after Phase 2): weather → budget
+ *   Budget depends on every prior section; runs last.
+ */
+export const PHASE_AGENTS: Record<1 | 2 | 3, ResearchAgentId[]> = {
+  1: ["route", "logistics"],
+  2: ["accommodation", "activity", "restaurant"],
+  3: ["weather", "budget"],
+};
+
+export interface PhaseEvent {
+  type: "phase";
+  phase: 1 | 2 | 3;
+  status: "start" | "complete";
+  agents: ResearchAgentId[];
 }
 
 const AGENT_SCHEMAS: Record<ResearchAgentId, ZodType<Record<string, unknown>>> = {
@@ -189,27 +214,31 @@ export async function runAgentSafely(
 }
 
 /**
- * Run all research agents. Independent ones run in parallel; budget runs last.
- * Never throws — all agent failures are absorbed into safe fallbacks.
+ * PHASED research orchestration. NEVER throws.
+ *
+ * Phase 1 (route, logistics) — sequential & blocking
+ * Phase 2 (accommodation, activity, restaurant) — bounded parallel, starts
+ *   only after Phase 1 reaches usable state (done or safe-fallback)
+ * Phase 3 (weather, budget) — sequential, starts only after Phase 2
+ *
+ * All agent failures absorbed into safe fallbacks — pipeline continues.
  */
 export async function runResearch(
   profile: TravelerProfile,
   onAgentUpdate?: (u: AgentUpdate) => void,
+  onPhase?: (ev: PhaseEvent) => void,
 ): Promise<ResearchResults> {
   const results: ResearchResults = {};
 
-  const independent = AGENTS.filter((a) => !a.dependsOnOthers);
-  const dependent = AGENTS.filter((a) => a.dependsOnOthers);
+  const agentById = new Map<ResearchAgentId, ResearchAgentDef>(
+    AGENTS.map((a) => [a.id, a]),
+  );
+  const phaseOf = (id: ResearchAgentId): 1 | 2 | 3 =>
+    PHASE_AGENTS[1].includes(id) ? 1 : PHASE_AGENTS[2].includes(id) ? 2 : 3;
 
   for (const a of AGENTS) {
-    onAgentUpdate?.({ agent: a.id, status: "pending" });
+    onAgentUpdate?.({ agent: a.id, status: "pending", phase: phaseOf(a.id) });
   }
-
-  const concurrency = Math.max(
-    1,
-    Number(process.env.AI_MAX_CONCURRENCY) || 3,
-  );
-  const limit = createLimiter(concurrency);
 
   const makeAttemptHandler = (agent: ResearchAgentDef) => {
     let fallbackSignaled = false;
@@ -220,6 +249,7 @@ export async function runResearch(
           status: "retrying",
           snippet: "Yeniden deneniyor...",
           provider: ev.provider,
+          phase: phaseOf(agent.id),
         });
       } else if (ev.phase === "fallback_triggered") {
         fallbackSignaled = true;
@@ -228,57 +258,21 @@ export async function runResearch(
           status: "fallback_running",
           snippet: "Yedek sağlayıcı deneniyor...",
           provider: ev.provider,
+          phase: phaseOf(agent.id),
         });
       } else if (ev.phase === "start" && fallbackSignaled && ev.attempt === 0) {
-        // first call on fallback provider after fallback_triggered — already announced
+        // already announced
       }
     };
   };
 
-  await Promise.all(
-    independent.map((agent) =>
-      limit(async () => {
-        onAgentUpdate?.({
-          agent: agent.id,
-          status: "running",
-          snippet: `${agent.label} araştırma başlıyor...`,
-        });
-        const input = agent.inputBuilder(profile);
-        const outcome = await runAgentSafely(
-          agent,
-          input,
-          makeAttemptHandler(agent),
-          profile,
-        );
-        results[agent.id] = outcome.data;
-        if (outcome.partial) {
-          onAgentUpdate?.({
-            agent: agent.id,
-            status: "partial",
-            snippet: "Kısmi sonuç — arka planda tekrar denenecek",
-            error: outcome.errorMessage,
-            errorCode: outcome.errorCode,
-            data: outcome.data,
-            partial: true,
-          });
-        } else {
-          onAgentUpdate?.({
-            agent: agent.id,
-            status: "done",
-            snippet: `${agent.label} tamamlandı (${outcome.provider})`,
-            data: outcome.data,
-            provider: outcome.provider,
-          });
-        }
-      }),
-    ),
-  );
-
-  for (const agent of dependent) {
+  const runOne = async (agent: ResearchAgentDef) => {
+    const ph = phaseOf(agent.id);
     onAgentUpdate?.({
       agent: agent.id,
       status: "running",
-      snippet: `${agent.label} hesaplanıyor...`,
+      snippet: `${agent.label} araştırma başlıyor...`,
+      phase: ph,
     });
     const input = agent.inputBuilder(profile, results);
     const outcome = await runAgentSafely(
@@ -297,6 +291,7 @@ export async function runResearch(
         errorCode: outcome.errorCode,
         data: outcome.data,
         partial: true,
+        phase: ph,
       });
     } else {
       onAgentUpdate?.({
@@ -305,9 +300,44 @@ export async function runResearch(
         snippet: `${agent.label} tamamlandı (${outcome.provider})`,
         data: outcome.data,
         provider: outcome.provider,
+        phase: ph,
       });
     }
+  };
+
+  // --- PHASE 1 — sequential blocking: route, logistics ---
+  onPhase?.({ type: "phase", phase: 1, status: "start", agents: PHASE_AGENTS[1] });
+  logAi({ phase: "start", message: "phase=1 agents=route,logistics mode=sequential" });
+  for (const id of PHASE_AGENTS[1]) {
+    const a = agentById.get(id);
+    if (a) await runOne(a);
   }
+  onPhase?.({ type: "phase", phase: 1, status: "complete", agents: PHASE_AGENTS[1] });
+  logAi({ phase: "success", message: "phase=1 complete" });
+
+  // --- PHASE 2 — bounded parallel after Phase 1 ---
+  onPhase?.({ type: "phase", phase: 2, status: "start", agents: PHASE_AGENTS[2] });
+  logAi({ phase: "start", message: "phase=2 agents=accommodation,activity,restaurant mode=bounded-parallel" });
+  const concurrency = Math.max(1, Number(process.env.AI_MAX_CONCURRENCY) || 3);
+  const limit = createLimiter(concurrency);
+  await Promise.all(
+    PHASE_AGENTS[2].map((id) => {
+      const a = agentById.get(id);
+      return a ? limit(() => runOne(a)) : Promise.resolve();
+    }),
+  );
+  onPhase?.({ type: "phase", phase: 2, status: "complete", agents: PHASE_AGENTS[2] });
+  logAi({ phase: "success", message: "phase=2 complete" });
+
+  // --- PHASE 3 — sequential after Phase 2: weather, budget ---
+  onPhase?.({ type: "phase", phase: 3, status: "start", agents: PHASE_AGENTS[3] });
+  logAi({ phase: "start", message: "phase=3 agents=weather,budget mode=sequential" });
+  for (const id of PHASE_AGENTS[3]) {
+    const a = agentById.get(id);
+    if (a) await runOne(a);
+  }
+  onPhase?.({ type: "phase", phase: 3, status: "complete", agents: PHASE_AGENTS[3] });
+  logAi({ phase: "success", message: "phase=3 complete" });
 
   return results;
 }

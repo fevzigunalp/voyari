@@ -53,7 +53,14 @@ interface ErrorEvent {
   error: string;
 }
 
-type StreamEvent = AgentEvent | CompleteEvent | ErrorEvent;
+interface PhaseEvent {
+  type: "phase";
+  phase: 1 | 2 | 3;
+  status: "start" | "complete";
+  agents: ResearchAgentId[];
+}
+
+type StreamEvent = AgentEvent | CompleteEvent | ErrorEvent | PhaseEvent;
 
 interface AgentUiState {
   id: ResearchAgentId;
@@ -102,6 +109,8 @@ export function ResearchDashboard({
     () => initialStates(),
   );
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [activePhase, setActivePhase] = useState<1 | 2 | 3 | null>(null);
+  const [completedPhases, setCompletedPhases] = useState<Array<1 | 2 | 3>>([]);
   const setResearch = useTravelStore((s) => s.setResearch);
   const updateResearchAgent = useTravelStore((s) => s.updateResearchAgent);
   const startedRef = useRef(false);
@@ -292,6 +301,13 @@ export function ResearchDashboard({
             } else if ("type" in evt && evt.type === "error") {
               setGlobalError(evt.error);
               onError?.(evt.error);
+            } else if ("type" in evt && evt.type === "phase") {
+              setActivePhase(evt.status === "start" ? evt.phase : null);
+              if (evt.status === "complete") {
+                setCompletedPhases((prev) =>
+                  prev.includes(evt.phase) ? prev : [...prev, evt.phase],
+                );
+              }
             } else if ("agent" in evt) {
               updateAgent(evt);
             }
@@ -354,7 +370,7 @@ export function ResearchDashboard({
           Seyahat DNA&apos;nız işleniyor
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          7 uzman ajan paralel olarak araştırma yapıyor. Bu 1-3 dakika sürebilir.
+          3 fazda sıralı araştırma — her faz bir öncekinin sonucuna dayanıyor.
         </p>
       </div>
 
@@ -364,23 +380,58 @@ export function ResearchDashboard({
         label={`${doneCount}/${total} ajan tamamlandı`}
       />
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {AGENT_DEFS.map((a) => (
-          <AgentCard
-            key={a.id}
-            id={a.id}
-            icon={a.icon}
-            label={a.label}
-            status={states[a.id].status}
-            snippets={states[a.id].snippets}
-            error={states[a.id].error}
-            retryInFlight={states[a.id].retryInFlight}
-            onManualRetry={() => {
-              void runManualRetry(a.id);
-            }}
-          />
-        ))}
-      </div>
+      {([
+        { phase: 1, title: "Faz 1 — Temel", subtitle: "Rota · Lojistik (sıralı)", ids: ["route", "logistics"] as ResearchAgentId[] },
+        { phase: 2, title: "Faz 2 — İçerik", subtitle: "Konaklama · Aktivite · Restoran (paralel)", ids: ["accommodation", "activity", "restaurant"] as ResearchAgentId[] },
+        { phase: 3, title: "Faz 3 — Zenginleştirme", subtitle: "Hava · Bütçe (sıralı)", ids: ["weather", "budget"] as ResearchAgentId[] },
+      ] as const).map((p) => {
+        const isActive = activePhase === p.phase;
+        const isDone = completedPhases.includes(p.phase);
+        const isPending = !isActive && !isDone;
+        return (
+          <div key={p.phase} className="mt-10">
+            <div className="flex items-baseline justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`font-mono text-[10px] uppercase tracking-[0.22em] ${
+                    isActive
+                      ? "text-[#E8C97A]"
+                      : isDone
+                        ? "text-emerald-300/80"
+                        : "text-text-muted/60"
+                  }`}
+                >
+                  {isDone ? "✓ " : isActive ? "▸ " : ""}
+                  {p.title}
+                </div>
+                <span className="text-xs text-text-muted">{p.subtitle}</span>
+              </div>
+              {isPending && (
+                <span className="text-[10px] uppercase tracking-[0.2em] text-text-muted/60 font-mono">
+                  Beklemede
+                </span>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {p.ids.map((id) => (
+                <AgentCard
+                  key={id}
+                  id={id}
+                  icon={AGENT_DEFS.find((a) => a.id === id)?.icon ?? "●"}
+                  label={AGENT_DEFS.find((a) => a.id === id)?.label ?? id}
+                  status={states[id].status}
+                  snippets={states[id].snippets}
+                  error={states[id].error}
+                  retryInFlight={states[id].retryInFlight}
+                  onManualRetry={() => {
+                    void runManualRetry(id);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       {globalError && (
         <div className="mt-6 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-200">

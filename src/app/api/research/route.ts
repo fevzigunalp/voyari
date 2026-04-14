@@ -45,9 +45,11 @@ export async function POST(req: NextRequest) {
         // runResearch no longer throws — each agent is isolated and falls back
         // to a safe stub. We always reach research-complete.
         const raceResult = await Promise.race([
-          runResearch(profile, (u: AgentUpdate) => {
-            send(u);
-          }),
+          runResearch(
+            profile,
+            (u: AgentUpdate) => send(u),
+            (p) => send(p),
+          ),
           wallTimeout,
         ]);
         if (raceResult === "wall-timeout") {
