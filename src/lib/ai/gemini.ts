@@ -4,7 +4,7 @@
  */
 import { ProviderError, type CallOptions, type ProviderCall } from "./types";
 
-const DEFAULT_MODEL = "gemini-1.5-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const DEFAULT_TIMEOUT = 60_000;
 
 interface GeminiPart {

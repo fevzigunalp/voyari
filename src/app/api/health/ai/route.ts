@@ -8,7 +8,7 @@
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
 interface ProviderInfo {

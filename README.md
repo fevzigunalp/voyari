@@ -92,7 +92,7 @@ Her boundary'de `[voyari.ai] provider=… status=… durationMs=… reason=…` 
 | `AI_PROVIDER_PRIMARY` | — | `gemini` | `gemini` veya `anthropic` |
 | `AI_ENABLE_FALLBACK` | — | `true` | `"false"` ise fallback devre dışı |
 | `AI_TIMEOUT_MS` | — | `60000` | Provider başına timeout |
-| `GEMINI_MODEL` | — | `gemini-1.5-flash` | Gemini model override |
+| `GEMINI_MODEL` | — | `gemini-2.5-flash` | Gemini model override |
 | `ANTHROPIC_MODEL` | — | `claude-haiku-4-5-20251001` | Claude model override |
 | `AI_MAX_CONCURRENCY` | — | `3` | Araştırma sırasında paralel AI isteği üst sınırı |
 | `AI_MAX_RETRIES` | — | `3` | Provider başına retry (429/5xx/timeout/network), exp. backoff 1s → 2s → 4s |
