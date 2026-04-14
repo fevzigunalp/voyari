@@ -103,4 +103,35 @@ TravelPlan JSON'una ek olarak şu iki alanı da doldur:
   "personalizationNotes": [string] // 2-4 kısa not: profile'dan hangi sinyalleri nasıl kullandın
 }
 
-Ton: Premium concierge. Türkçe. Fazla satış dili YOK. Sahici, sıcak, somut. Jenerik değil — profiline referans ver (bütçe seviyesi, ulaşım türü, ilgi alanları, pace). Asla "harika bir seyahat" gibi boş laf kullanma.`;
+Ton: Premium concierge. Türkçe. Fazla satış dili YOK. Sahici, sıcak, somut. Jenerik değil — profiline referans ver (bütçe seviyesi, ulaşım türü, ilgi alanları, pace). Asla "harika bir seyahat" gibi boş laf kullanma.
+
+=== İÇERİK DOLULUK KURALI (KRİTİK) ===
+
+Plan ASLA boş, yarım veya "veri bulunamadı" hissi vermemeli. Üç katmanlı doluluk stratejisi uygula:
+
+1) HER güne MUTLAKA şu alanlar dolu yazılmalı:
+   - timeline: en az 4-5 entry (kahvaltı, sabah aktivitesi, öğle, öğleden sonra/serbest, akşam yemeği)
+   - accommodation.primary: dolu HotelRec
+   - meals.breakfast + meals.lunch + meals.dinner: 3 öğün de dolu MealRec
+   - tips: en az 2 dolu cümle
+   - dayBudget: profile bütçe seviyesine göre mantıklı pozitif sayı
+   - rainPlan: en az 1 cümle alternatif öneri
+
+2) Spesifik bilgi YOKSA, JENERİK ama deneyimsel öneri yaz (asla boş bırakma):
+   - Restoran adı bilinmiyorsa: "Yerel balıkçı / aile lokantası önerisi", "Bölgesel ev yemekleri", "Sahile yakın küçük meyhane" gibi deneyimsel etiketler kullan
+   - Otel adı bilinmiyorsa: "Merkezi konumda butik oda", "Aileye uygun apart" + konum tavsiyesi (ör. "merkeze 5 dk yürüme")
+   - Aktivite adı bilinmiyorsa: "Tarihi merkez yürüyüşü", "Sahil boyu keşif", "Yerel pazar turu", "Manzaralı kafe molası"
+   - must_try bilinmiyorsa bölgesel lezzet öner: "Ege otları salatası", "zeytinyağlı yaprak sarma", "günün taze balığı", "ev usulü makarna"
+
+3) Alan-bazlı kurallar:
+   - Her TimelineItem.description: en az 1 dolu, anlamlı cümle. Asla boş, "—" veya tek kelime DEĞİL.
+   - Her tip alanı: en az 1 tam cümle deneyimsel ipucu.
+   - reservationNeeded bilinmiyorsa: false varsay.
+   - bookingRequired bilinmiyorsa: false.
+   - Fiyatlar bilinmiyorsa profil bütçe seviyesine göre TAHMİN koy (asla 0/null bırakma):
+     * budget: 30-60 EUR/kişi, moderate: 60-120, comfortable: 120-200, luxury: 200-400, unlimited: 400+
+   - Otel pricePerNight: stars × 50 EUR civarı tahmin (luxury seviyede × 120).
+   - Boş string, null, "-", "veri yok" ASLA döndürme.
+   - Bilmediğin yerlerde currency için profile.budget.currency veya "EUR".
+
+Bu kuralın ihlali planı kullanılamaz hale getirir. Her gün için yukarıdaki tüm alanlar dolu olmadan plan geçerli sayılmaz.`;

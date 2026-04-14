@@ -18,6 +18,19 @@ import { createLimiter } from "./limit";
 import { preferredPrimary, getRetryPolicy } from "./agent-routing";
 import { safeFallbackFor, isPartial } from "./safe-fallbacks";
 import {
+  experientialBudget,
+  experientialCountryInfo,
+  experientialDocChecklist,
+  experientialEmergencyContacts,
+  experientialNarrative,
+  experientialPackingList,
+  experientialReservationTimeline,
+  experientialCountryRule,
+  experientialVehicleChecklist,
+  generateExperientialDays,
+  currencyOf,
+} from "./experiential-content";
+import {
   RouteAgentSchema,
   WeatherAgentSchema,
   AccommodationAgentSchema,
@@ -117,6 +130,7 @@ export async function runAgentSafely(
   agent: ResearchAgentDef,
   input: string,
   onAttempt?: (ev: AttemptEvent) => void,
+  profile?: TravelerProfile,
 ): Promise<AgentRunOutcome> {
   const pref = preferredPrimary(agent.id);
   logAi({
@@ -166,7 +180,7 @@ export async function runAgentSafely(
       message: `agent=${agent.id} event=final_state outcome=fallback code=${code} partial=true`,
     });
     return {
-      data: safeFallbackFor(agent.id),
+      data: safeFallbackFor(agent.id, profile),
       partial: true,
       errorCode: code,
       errorMessage: "AI hizmeti geçici olarak kullanılamıyor",
@@ -234,6 +248,7 @@ export async function runResearch(
           agent,
           input,
           makeAttemptHandler(agent),
+          profile,
         );
         results[agent.id] = outcome.data;
         if (outcome.partial) {
@@ -270,6 +285,7 @@ export async function runResearch(
       agent,
       input,
       makeAttemptHandler(agent),
+      profile,
     );
     results[agent.id] = outcome.data;
     if (outcome.partial) {
@@ -316,6 +332,21 @@ export function buildMinimalPlan(
   const weatherRaw = isRecord(research?.weather)
     ? (research.weather as Record<string, unknown>).days
     : null;
+
+  const totalDays = Math.max(1, profile.totalDays || 1);
+  const expDays = generateExperientialDays(profile, totalDays);
+  const expBudget = experientialBudget(profile);
+  const narrative = experientialNarrative(profile);
+  const currency = currencyOf(profile);
+
+  const fallbackCountries = [experientialCountryInfo(profile)];
+  const fallbackRules = [experientialCountryRule(profile)];
+  const fallbackEmergency = experientialEmergencyContacts(profile);
+  const fallbackPacking = experientialPackingList();
+  const fallbackVehicle = experientialVehicleChecklist();
+  const fallbackDocs = experientialDocChecklist();
+  const fallbackReservations = experientialReservationTimeline();
+
   return {
     id: `plan_${Date.now()}`,
     createdAt: new Date().toISOString(),
@@ -329,77 +360,71 @@ export function buildMinimalPlan(
         typeof route["totalDrivingHours"] === "number"
           ? (route["totalDrivingHours"] as number)
           : 0,
-      countries: Array.isArray(route["countries"])
-        ? (route["countries"] as TravelPlan["route"]["countries"])
-        : [],
+      countries:
+        Array.isArray(route["countries"]) && (route["countries"] as unknown[]).length > 0
+          ? (route["countries"] as TravelPlan["route"]["countries"])
+          : fallbackCountries,
       waypoints: Array.isArray(route["waypoints"])
         ? (route["waypoints"] as TravelPlan["route"]["waypoints"])
         : [],
     },
-    days: [],
+    days: expDays,
     budget: {
-      breakdown: Array.isArray(budget["breakdown"])
-        ? (budget["breakdown"] as TravelPlan["budget"]["breakdown"])
-        : [],
-      dailyEstimates: Array.isArray(budget["dailyEstimates"])
-        ? (budget["dailyEstimates"] as TravelPlan["budget"]["dailyEstimates"])
-        : [],
+      breakdown:
+        Array.isArray(budget["breakdown"]) && (budget["breakdown"] as unknown[]).length > 0
+          ? (budget["breakdown"] as TravelPlan["budget"]["breakdown"])
+          : expBudget.breakdown,
+      dailyEstimates:
+        Array.isArray(budget["dailyEstimates"]) && (budget["dailyEstimates"] as unknown[]).length > 0
+          ? (budget["dailyEstimates"] as TravelPlan["budget"]["dailyEstimates"])
+          : expBudget.dailyEstimates,
       totalEstimate:
-        typeof budget["totalEstimate"] === "number"
+        typeof budget["totalEstimate"] === "number" && (budget["totalEstimate"] as number) > 0
           ? (budget["totalEstimate"] as number)
-          : 0,
+          : expBudget.totalEstimate,
       perPersonEstimate:
-        typeof budget["perPersonEstimate"] === "number"
+        typeof budget["perPersonEstimate"] === "number" && (budget["perPersonEstimate"] as number) > 0
           ? (budget["perPersonEstimate"] as number)
-          : 0,
+          : expBudget.perPersonEstimate,
       currency:
         typeof budget["currency"] === "string"
           ? (budget["currency"] as string)
-          : "EUR",
-      savingTips: Array.isArray(budget["savingTips"])
-        ? (budget["savingTips"] as string[])
-        : [],
+          : currency,
+      savingTips:
+        Array.isArray(budget["savingTips"]) && (budget["savingTips"] as unknown[]).length > 0
+          ? (budget["savingTips"] as string[])
+          : expBudget.savingTips,
     },
     logistics: {
-      countryRules: Array.isArray(logistics["countryRules"])
-        ? (logistics[
-            "countryRules"
-          ] as TravelPlan["logistics"]["countryRules"])
-        : [],
-      vehicleChecklist: Array.isArray(logistics["vehicleChecklist"])
-        ? (logistics[
-            "vehicleChecklist"
-          ] as TravelPlan["logistics"]["vehicleChecklist"])
-        : [],
-      packingList: Array.isArray(logistics["packingList"])
-        ? (logistics["packingList"] as TravelPlan["logistics"]["packingList"])
-        : [],
-      documentChecklist: Array.isArray(logistics["documentChecklist"])
-        ? (logistics[
-            "documentChecklist"
-          ] as TravelPlan["logistics"]["documentChecklist"])
-        : [],
-      reservationTimeline: Array.isArray(logistics["reservationTimeline"])
-        ? (logistics[
-            "reservationTimeline"
-          ] as TravelPlan["logistics"]["reservationTimeline"])
-        : [],
-      emergencyContacts: Array.isArray(logistics["emergencyContacts"])
-        ? (logistics[
-            "emergencyContacts"
-          ] as TravelPlan["logistics"]["emergencyContacts"])
-        : [],
+      countryRules:
+        Array.isArray(logistics["countryRules"]) && (logistics["countryRules"] as unknown[]).length > 0
+          ? (logistics["countryRules"] as TravelPlan["logistics"]["countryRules"])
+          : fallbackRules,
+      vehicleChecklist:
+        Array.isArray(logistics["vehicleChecklist"]) && (logistics["vehicleChecklist"] as unknown[]).length > 0
+          ? (logistics["vehicleChecklist"] as TravelPlan["logistics"]["vehicleChecklist"])
+          : fallbackVehicle,
+      packingList:
+        Array.isArray(logistics["packingList"]) && (logistics["packingList"] as unknown[]).length > 0
+          ? (logistics["packingList"] as TravelPlan["logistics"]["packingList"])
+          : fallbackPacking,
+      documentChecklist:
+        Array.isArray(logistics["documentChecklist"]) && (logistics["documentChecklist"] as unknown[]).length > 0
+          ? (logistics["documentChecklist"] as TravelPlan["logistics"]["documentChecklist"])
+          : fallbackDocs,
+      reservationTimeline:
+        Array.isArray(logistics["reservationTimeline"]) && (logistics["reservationTimeline"] as unknown[]).length > 0
+          ? (logistics["reservationTimeline"] as TravelPlan["logistics"]["reservationTimeline"])
+          : fallbackReservations,
+      emergencyContacts:
+        Array.isArray(logistics["emergencyContacts"]) && (logistics["emergencyContacts"] as unknown[]).length > 0
+          ? (logistics["emergencyContacts"] as TravelPlan["logistics"]["emergencyContacts"])
+          : fallbackEmergency,
     },
     weather: Array.isArray(weatherRaw)
       ? (weatherRaw as TravelPlan["weather"])
       : [],
-    narrative: {
-      glanceTitle: "Plan İskeleti Hazır",
-      emotionalSummary:
-        "Plan bazı bölümleri kısmi olarak üretildi — yeniden deneyebilirsiniz.",
-      whyPerfectForYou: [],
-      whatMakesUnique: [],
-    },
+    narrative,
     partial: true,
     partialAgents,
   };

@@ -87,7 +87,9 @@ export function ChecklistPanel({ plan }: ChecklistPanelProps) {
 
       {active === "reservations" ? (
         reservations.length === 0 ? (
-          <div className="text-sm text-text-muted">Rezervasyon yok.</div>
+          <div className="rounded-lg border border-[var(--border-subtle)] bg-[rgba(17,24,39,0.4)] p-3 text-sm text-text-secondary">
+            Rezervasyon takvimi henüz hazırlanıyor — bu sırada otel ve ulaşım için 3 hafta önceden planlama yapmanız önerilir.
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {reservations.map((r) => (
@@ -158,7 +160,9 @@ export function ChecklistPanel({ plan }: ChecklistPanelProps) {
           })}
         </div>
       ) : (
-        <div className="text-sm text-text-muted">Bu listede öğe yok.</div>
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[rgba(17,24,39,0.4)] p-3 text-sm text-text-secondary">
+          Bu sezonun önerilen listesi hazırlanıyor — pasaport, kredi kartı, şarj adaptörü ve konforlu ayakkabı her zaman temel.
+        </div>
       )}
     </Card>
   );

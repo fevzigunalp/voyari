@@ -39,13 +39,15 @@ export function CountryInfoCard({
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Info icon={Coins} label="Para Birimi" value={country.currency} />
-        <Info icon={Plug} label="Priz Tipi" value={country.plugType} />
-        <Info
-          icon={Phone}
-          label="Acil"
-          value={country.emergencyNumber}
-        />
+        {country.currency ? (
+          <Info icon={Coins} label="Para Birimi" value={country.currency} />
+        ) : null}
+        {country.plugType ? (
+          <Info icon={Plug} label="Priz Tipi" value={country.plugType} />
+        ) : null}
+        {country.emergencyNumber ? (
+          <Info icon={Phone} label="Acil" value={country.emergencyNumber} />
+        ) : null}
         {visa && <Info icon={FileText} label="Vize" value={visa} />}
       </div>
 

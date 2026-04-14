@@ -52,7 +52,7 @@ export function DayCard({ day, currency }: DayCardProps) {
           )}
         </div>
 
-        {day.driving && (
+        {day.driving && day.driving.distanceKm > 0 && (
           <div className="mt-4 grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-[rgba(17,24,39,0.4)] p-3 sm:grid-cols-4">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-muted font-mono flex items-center gap-1">

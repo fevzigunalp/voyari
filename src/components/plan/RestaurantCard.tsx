@@ -19,10 +19,12 @@ export function RestaurantCard({ meal, label }: RestaurantCardProps) {
             {label}
           </div>
         </div>
-        {typeof meal.pricePerPerson === "number" && (
+        {typeof meal.pricePerPerson === "number" && meal.pricePerPerson > 0 ? (
           <Badge tone="gold">
             {meal.pricePerPerson} {meal.currency}/kişi
           </Badge>
+        ) : (
+          <Badge tone="neutral">Fiyat aralığı: mevsimsel</Badge>
         )}
       </div>
       <div className="font-display text-base text-text-primary mt-1">

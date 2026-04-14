@@ -12,7 +12,9 @@ export function ActivityItem({ item }: ActivityItemProps) {
   return (
     <div className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-[rgba(17,24,39,0.4)] p-3">
       <div className="flex flex-col items-center gap-1 min-w-[60px]">
-        <div className="font-mono text-xs text-[#E8C97A]">{item.time}</div>
+        <div className="font-mono text-xs text-[#E8C97A]">
+          {item.time && item.time.trim() ? item.time : "Esnek"}
+        </div>
         {item.endTime && (
           <div className="font-mono text-[10px] text-text-muted">
             {item.endTime}

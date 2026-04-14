@@ -39,17 +39,19 @@ export function HotelCard({ hotel }: HotelCardProps) {
             </div>
           )}
         </div>
-        <div className="text-right shrink-0">
-          <div className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
-            Gecelik
+        {typeof hotel.pricePerNight === "number" && hotel.pricePerNight > 0 && (
+          <div className="text-right shrink-0">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
+              Gecelik
+            </div>
+            <div className="font-display text-xl text-[#E8C97A]">
+              {hotel.pricePerNight.toLocaleString("tr-TR")}{" "}
+              <span className="text-xs text-text-secondary">
+                {hotel.currency}
+              </span>
+            </div>
           </div>
-          <div className="font-display text-xl text-[#E8C97A]">
-            {hotel.pricePerNight?.toLocaleString("tr-TR") ?? "—"}{" "}
-            <span className="text-xs text-text-secondary">
-              {hotel.currency}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
       {highlights.length > 0 && (
@@ -63,14 +65,16 @@ export function HotelCard({ hotel }: HotelCardProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-text-secondary">
-        <div className="flex items-center gap-1">
-          <ParkingCircle className="h-3.5 w-3.5" />
-          {hotel.parkingAvailable
-            ? hotel.parkingCost
-              ? `Otopark ${hotel.parkingCost} ${hotel.currency}`
-              : "Otopark ücretsiz"
-            : "Otopark yok"}
-        </div>
+        {typeof hotel.parkingAvailable === "boolean" && (
+          <div className="flex items-center gap-1">
+            <ParkingCircle className="h-3.5 w-3.5" />
+            {hotel.parkingAvailable
+              ? hotel.parkingCost
+                ? `Otopark ${hotel.parkingCost} ${hotel.currency}`
+                : "Otopark mevcut"
+              : "Otopark dışarıda"}
+          </div>
+        )}
         {hotel.coordinates && (
           <div className="font-mono text-[10px] text-text-muted">
             {hotel.coordinates[0].toFixed(3)}, {hotel.coordinates[1].toFixed(3)}
