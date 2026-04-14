@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   addDays,
   addMonths,
@@ -65,40 +65,37 @@ export function DatePicker({
 
   const grid = useMemo(() => buildMonthGrid(anchor), [anchor]);
 
-  // Emit value whenever we have a complete range
-  useEffect(() => {
-    if (selStart && selEnd) {
-      const [s, e] = isBefore(selEnd, selStart)
-        ? [selEnd, selStart]
-        : [selStart, selEnd];
-      const days = differenceInCalendarDays(e, s) + 1;
-      onChange({
-        startDate: format(s, "yyyy-MM-dd"),
-        endDate: format(e, "yyyy-MM-dd"),
-        totalDays: days,
-      });
-      setDayCountInput(String(days));
-    }
-  }, [selStart, selEnd, onChange]);
+  // Stable onChange ref to avoid re-firing on parent re-renders
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const emitRange = useCallback((s: Date, e: Date) => {
+    const [start, end] = isBefore(e, s) ? [e, s] : [s, e];
+    const days = differenceInCalendarDays(end, start) + 1;
+    onChangeRef.current({
+      startDate: format(start, "yyyy-MM-dd"),
+      endDate: format(end, "yyyy-MM-dd"),
+      totalDays: days,
+    });
+    setDayCountInput(String(days));
+  }, []);
 
   const handlePick = (d: Date) => {
     if (isBefore(d, addDays(today, -1))) return;
 
-    // Hotel-style behavior:
-    // - no start, or both set → begin fresh selection
-    // - only start set → set end (swap if earlier)
+    // Hotel-style: no start or both set → begin fresh; only start → finalize
     if (!selStart || (selStart && selEnd)) {
       setSelStart(d);
       setSelEnd(null);
       return;
     }
     if (isSameDay(d, selStart)) {
-      // Clicking same day again resets
       setSelStart(null);
       setSelEnd(null);
       return;
     }
     setSelEnd(d);
+    emitRange(selStart, d);
   };
 
   const handleReset = () => {
@@ -115,9 +112,11 @@ export function DatePicker({
     const n = parseInt(clean, 10);
     if (!n || n < 1) return;
     const base = selStart ?? today;
+    const end = addDays(base, n - 1);
     if (!selStart) setSelStart(base);
-    setSelEnd(addDays(base, n - 1));
-    setAnchor(addDays(base, n - 1));
+    setSelEnd(end);
+    setAnchor(end);
+    emitRange(base, end);
   };
 
   // Visual helpers — show preview when hovering second date
