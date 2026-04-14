@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { generateObject } from "@/lib/ai/provider";
 import { ExtractedIntentSchema, type ExtractedIntent } from "@/lib/ai/schema";
 import { INTENT_EXTRACTOR_PROMPT } from "@/lib/ai/prompts/intent-extractor";
+import { buildAiErrorResponse } from "@/lib/ai/errors";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -44,10 +45,6 @@ export async function POST(req: NextRequest) {
     );
     return Response.json({ intent: result.data });
   } catch (err) {
-    console.error("[voyari.ai] /api/extract-intent failed", err);
-    return Response.json(
-      { error: "Niyet çıkarımı şu an yapılamıyor" },
-      { status: 503 },
-    );
+    return buildAiErrorResponse(err, "/api/extract-intent");
   }
 }

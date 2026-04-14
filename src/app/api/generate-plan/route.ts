@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { synthesizePlan, type ResearchResults } from "@/lib/ai/plan-generator";
+import { buildAiErrorResponse } from "@/lib/ai/errors";
 
 export const runtime = "edge";
 export const maxDuration = 300;
@@ -32,10 +33,6 @@ export async function POST(req: NextRequest) {
     plan.createdAt = new Date().toISOString();
     return Response.json({ plan });
   } catch (err) {
-    console.error("[voyari.ai] /api/generate-plan failed", err);
-    return Response.json(
-      { error: "AI hizmeti geçici olarak kullanılamıyor" },
-      { status: 503 },
-    );
+    return buildAiErrorResponse(err, "/api/generate-plan");
   }
 }

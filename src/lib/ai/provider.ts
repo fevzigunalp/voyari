@@ -3,11 +3,11 @@
  *
  * Flow:
  *  1. Pick primary provider from AI_PROVIDER_PRIMARY (default "gemini").
- *  2. Call primary, repair + zod-validate. Return on success.
- *  3. If fails AND AI_ENABLE_FALLBACK != "false": call the other provider.
- *  4. If both fail: log details, throw a safe generic error.
+ *  2. Call primary with retries on retryable errors (429/5xx/timeout/network).
+ *  3. If retries exhausted AND AI_ENABLE_FALLBACK != "false": retry on fallback.
+ *  4. If both exhausted: throw an Error stamped with {providersTried, lastKind, lastStatus}.
  *
- * Logs one-line events via logAi() at every boundary for Cloudflare Pages logs.
+ * Structured JSON logs via logAi() for Cloudflare Pages / Workers logs.
  */
 import type { ZodType } from "zod";
 import { callGemini } from "./gemini";
@@ -26,20 +26,33 @@ const PROVIDERS: Record<ProviderName, ProviderCall> = {
   anthropic: callAnthropic,
 };
 
-interface AiEvent {
-  provider: ProviderName;
-  status: "start" | "success" | "fallback" | "error";
+interface AiLogEvent {
+  route?: string;
+  phase:
+    | "start"
+    | "success"
+    | "error"
+    | "retry"
+    | "fallback_triggered"
+    | "exhausted";
+  provider?: ProviderName;
+  attempt?: number;
+  kind?: string;
+  status?: number;
   durationMs?: number;
-  reason?: string;
+  backoffMs?: number;
   repaired?: boolean;
+  message?: string;
 }
 
-export function logAi(event: AiEvent): void {
-  const parts = [`[voyari.ai]`, `provider=${event.provider}`, `status=${event.status}`];
-  if (typeof event.durationMs === "number") parts.push(`durationMs=${event.durationMs}`);
-  if (event.reason) parts.push(`reason=${event.reason}`);
-  if (typeof event.repaired === "boolean") parts.push(`repaired=${event.repaired}`);
-  console.info(parts.join(" "));
+export function logAi(event: AiLogEvent): void {
+  try {
+    console.info(
+      JSON.stringify({ tag: "voyari.ai", ts: Date.now(), ...event }),
+    );
+  } catch {
+    // ignore serialization failure
+  }
 }
 
 function readPrimary(): ProviderName {
@@ -53,13 +66,43 @@ function defaultTimeout(): number {
   const n = Number(process.env.AI_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : 60_000;
 }
+function maxRetries(): number {
+  const n = Number(process.env.AI_MAX_RETRIES);
+  return Number.isFinite(n) && n >= 0 ? n : 3;
+}
 
-async function runOne<T>(
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+export function isRetryableProviderError(err: unknown): boolean {
+  if (!(err instanceof ProviderError)) return false;
+  if (err.kind === "timeout" || err.kind === "network") return true;
+  if (err.kind === "http" && err.status && RETRYABLE_STATUS.has(err.status)) {
+    return true;
+  }
+  return false;
+}
+
+function backoffMs(attempt: number): number {
+  const base = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s, 8s...
+  const jitter = Math.floor(Math.random() * 250);
+  return Math.min(base + jitter, 15_000);
+}
+
+function errDetails(err: unknown): { kind: string; status?: number; message: string } {
+  if (err instanceof ProviderError) {
+    return { kind: err.kind, status: err.status, message: err.message };
+  }
+  if (err instanceof Error) {
+    return { kind: "unknown", message: err.message };
+  }
+  return { kind: "unknown", message: String(err) };
+}
+
+async function callOnce<T>(
   provider: ProviderName,
   opts: CallOptions,
   schema: ZodType<T>,
 ): Promise<CallResult<T>> {
-  logAi({ provider, status: "start" });
   const call = PROVIDERS[provider];
   const { text, durationMs } = await call({
     ...opts,
@@ -73,7 +116,6 @@ async function runOne<T>(
       "schema validation failed or JSON unparseable",
     );
   }
-  logAi({ provider, status: "success", durationMs, repaired: parsed.repaired });
   return {
     provider,
     raw: text,
@@ -83,49 +125,108 @@ async function runOne<T>(
   };
 }
 
-/**
- * Primary call with schema-validated object return. Falls back on any
- * ProviderError or unexpected error.
- */
+async function runWithRetry<T>(
+  provider: ProviderName,
+  opts: CallOptions,
+  schema: ZodType<T>,
+): Promise<CallResult<T>> {
+  const retries = maxRetries();
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    logAi({ phase: "start", provider, attempt });
+    try {
+      const result = await callOnce(provider, opts, schema);
+      logAi({
+        phase: "success",
+        provider,
+        attempt,
+        durationMs: result.durationMs,
+        repaired: result.repaired,
+      });
+      return result;
+    } catch (err) {
+      lastErr = err;
+      const d = errDetails(err);
+      logAi({
+        phase: "error",
+        provider,
+        attempt,
+        kind: d.kind,
+        status: d.status,
+        message: d.message.slice(0, 240),
+      });
+      if (attempt < retries && isRetryableProviderError(err)) {
+        const wait = backoffMs(attempt);
+        logAi({ phase: "retry", provider, attempt: attempt + 1, backoffMs: wait });
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      break;
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new ProviderError(provider, "unknown", String(lastErr));
+}
+
+export interface ExhaustedError extends Error {
+  providersTried: ProviderName[];
+  lastKind: string;
+  lastStatus?: number;
+}
+
+/** Primary→(retries)→Fallback→(retries)→throw. */
 export async function generateObject<T>(
   opts: CallOptions,
   schema: ZodType<T>,
 ): Promise<CallResult<T>> {
   const primary = readPrimary();
   const fallback: ProviderName = primary === "gemini" ? "anthropic" : "gemini";
+  const providersTried: ProviderName[] = [];
 
+  let lastErr: unknown = null;
+
+  // Primary
+  providersTried.push(primary);
   try {
-    return await runOne(primary, opts, schema);
+    return await runWithRetry(primary, opts, schema);
   } catch (err) {
-    const reason =
-      err instanceof ProviderError
-        ? `${err.kind}:${err.message.slice(0, 160)}`
-        : err instanceof Error
-          ? `unknown:${err.message.slice(0, 160)}`
-          : "unknown";
-    logAi({ provider: primary, status: "error", reason });
-
-    if (!fallbackEnabled()) {
-      console.error(`[voyari.ai] primary=${primary} failed and fallback disabled`, err);
-      throw new Error("AI provider unavailable");
-    }
-
-    logAi({ provider: fallback, status: "fallback", reason });
-    try {
-      return await runOne(fallback, opts, schema);
-    } catch (err2) {
-      const reason2 =
-        err2 instanceof ProviderError
-          ? `${err2.kind}:${err2.message.slice(0, 160)}`
-          : err2 instanceof Error
-            ? `unknown:${err2.message.slice(0, 160)}`
-            : "unknown";
-      logAi({ provider: fallback, status: "error", reason: reason2 });
-      console.error(
-        `[voyari.ai] both providers failed primary=${primary} fallback=${fallback}`,
-        { primaryErr: err, fallbackErr: err2 },
-      );
-      throw new Error("AI provider unavailable");
-    }
+    lastErr = err;
   }
+
+  // Fallback
+  if (!fallbackEnabled()) {
+    const d = errDetails(lastErr);
+    logAi({ phase: "exhausted", provider: primary, kind: d.kind, status: d.status });
+    throw stampError(d, providersTried);
+  }
+
+  logAi({ phase: "fallback_triggered", provider: fallback });
+  providersTried.push(fallback);
+  try {
+    return await runWithRetry(fallback, opts, schema);
+  } catch (err2) {
+    const d = errDetails(err2);
+    logAi({ phase: "exhausted", provider: fallback, kind: d.kind, status: d.status });
+    throw stampError(d, providersTried);
+  }
+}
+
+function stampError(
+  d: { kind: string; status?: number; message: string },
+  providersTried: ProviderName[],
+): ExhaustedError {
+  const e = new Error("AI provider unavailable") as ExhaustedError;
+  e.providersTried = providersTried;
+  e.lastKind = d.kind;
+  if (typeof d.status === "number") e.lastStatus = d.status;
+  return e;
+}
+
+export function isExhaustedError(err: unknown): err is ExhaustedError {
+  return (
+    err instanceof Error &&
+    Array.isArray((err as ExhaustedError).providersTried) &&
+    typeof (err as ExhaustedError).lastKind === "string"
+  );
 }

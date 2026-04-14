@@ -15,6 +15,7 @@ import type { ResearchAgentId } from "@/lib/types/research";
 import { AGENTS, type ResearchAgentDef } from "./research-agents";
 import { PLAN_SYNTHESIZER_PROMPT } from "./prompts/plan-synthesizer";
 import { generateObject } from "./provider";
+import { createLimiter } from "./limit";
 import {
   RouteAgentSchema,
   WeatherAgentSchema,
@@ -84,32 +85,40 @@ export async function runResearch(
     onAgentUpdate?.({ agent: a.id, status: "pending" });
   }
 
+  const concurrency = Math.max(
+    1,
+    Number(process.env.AI_MAX_CONCURRENCY) || 3,
+  );
+  const limit = createLimiter(concurrency);
+
   await Promise.all(
-    independent.map(async (agent) => {
-      onAgentUpdate?.({
-        agent: agent.id,
-        status: "running",
-        snippet: `${agent.label} araştırma başlıyor...`,
-      });
-      try {
-        const input = agent.inputBuilder(profile);
-        const { data, provider } = await callAgent(agent, input);
-        results[agent.id] = data;
+    independent.map((agent) =>
+      limit(async () => {
         onAgentUpdate?.({
           agent: agent.id,
-          status: "done",
-          snippet: `${agent.label} tamamlandı (${provider})`,
-          data,
-          provider,
+          status: "running",
+          snippet: `${agent.label} araştırma başlıyor...`,
         });
-      } catch (err) {
-        // Never leak raw provider details to client; log server-side.
-        console.error(`[voyari.ai] agent=${agent.id} failed`, err);
-        const safeMsg = "AI hizmeti geçici olarak kullanılamıyor";
-        results[agent.id] = { error: safeMsg };
-        onAgentUpdate?.({ agent: agent.id, status: "error", error: safeMsg });
-      }
-    }),
+        try {
+          const input = agent.inputBuilder(profile);
+          const { data, provider } = await callAgent(agent, input);
+          results[agent.id] = data;
+          onAgentUpdate?.({
+            agent: agent.id,
+            status: "done",
+            snippet: `${agent.label} tamamlandı (${provider})`,
+            data,
+            provider,
+          });
+        } catch (err) {
+          // Never leak raw provider details to client; log server-side.
+          console.error(`[voyari.ai] agent=${agent.id} failed`, err);
+          const safeMsg = "AI hizmeti geçici olarak kullanılamıyor";
+          results[agent.id] = { error: safeMsg };
+          onAgentUpdate?.({ agent: agent.id, status: "error", error: safeMsg });
+        }
+      }),
+    ),
   );
 
   for (const agent of dependent) {

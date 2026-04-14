@@ -4,6 +4,7 @@ import { PLAN_REFINER_PROMPT } from "@/lib/ai/prompts/plan-refiner";
 import { generateObject } from "@/lib/ai/provider";
 import { TravelPlanSchema } from "@/lib/ai/schema";
 import { normalizePlan } from "@/lib/ai/normalize";
+import { buildAiErrorResponse } from "@/lib/ai/errors";
 
 export const runtime = "edge";
 export const maxDuration = 300;
@@ -64,10 +65,6 @@ Sadece geçerli JSON döndür.`;
 
     return Response.json({ plan: normalized });
   } catch (err) {
-    console.error("[voyari.ai] /api/refine-plan failed", err);
-    return Response.json(
-      { error: "AI hizmeti geçici olarak kullanılamıyor" },
-      { status: 503 },
-    );
+    return buildAiErrorResponse(err, "/api/refine-plan");
   }
 }

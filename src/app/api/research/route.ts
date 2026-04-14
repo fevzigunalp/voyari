@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { runResearch, type AgentUpdate } from "@/lib/ai/plan-generator";
+import { isExhaustedError } from "@/lib/ai/provider";
 
 export const runtime = "edge";
 export const maxDuration = 300;
@@ -42,11 +43,30 @@ export async function POST(req: NextRequest) {
         });
         send({ type: "research-complete", research });
       } catch (err) {
-        console.error("[voyari.ai] /api/research stream failed", err);
-        send({
-          type: "error",
-          error: "AI hizmeti geçici olarak kullanılamıyor",
-        });
+        console.error(
+          JSON.stringify({
+            tag: "voyari.api.error",
+            route: "/api/research",
+            message: err instanceof Error ? err.message.slice(0, 240) : String(err),
+          }),
+        );
+        let reason: "rate_limited" | "timeout" | "provider_exhausted" | "unknown" =
+          "unknown";
+        let message = "AI hizmeti geçici olarak kullanılamıyor";
+        if (isExhaustedError(err)) {
+          if (err.lastKind === "timeout") {
+            reason = "timeout";
+            message = "AI sağlayıcısı geç cevap verdi. Tekrar deneyebilirsiniz.";
+          } else if (err.lastKind === "http" && err.lastStatus === 429) {
+            reason = "rate_limited";
+            message = "Sistem şu an yoğun. Birkaç saniye sonra tekrar deneyin.";
+          } else {
+            reason = "provider_exhausted";
+            message =
+              "AI sağlayıcıları geçici olarak kullanılamıyor. Lütfen biraz sonra tekrar deneyin.";
+          }
+        }
+        send({ type: "error", error: message, reason });
       } finally {
         controller.close();
       }

@@ -3,6 +3,7 @@ import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { getAgent } from "@/lib/ai/research-agents";
 import { generateObject } from "@/lib/ai/provider";
 import { WeatherAgentSchema } from "@/lib/ai/schema";
+import { buildAiErrorResponse } from "@/lib/ai/errors";
 
 export const runtime = "edge";
 export const maxDuration = 60;
@@ -37,10 +38,6 @@ export async function POST(req: NextRequest) {
     );
     return Response.json({ data: result.data });
   } catch (err) {
-    console.error("[voyari.ai] /api/weather failed", err);
-    return Response.json(
-      { error: "AI hizmeti geçici olarak kullanılamıyor" },
-      { status: 503 },
-    );
+    return buildAiErrorResponse(err, "/api/weather");
   }
 }

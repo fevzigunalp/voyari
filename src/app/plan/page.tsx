@@ -48,7 +48,16 @@ export default function PlanPage() {
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || `Sunucu hatası (${res.status})`);
+          const reason = typeof body?.reason === "string" ? body.reason : "";
+          const friendly =
+            reason === "rate_limited"
+              ? "Sistem şu an yoğun. Birkaç saniye sonra tekrar deneyin."
+              : reason === "timeout"
+                ? "AI sağlayıcısı geç cevap verdi. Tekrar deneyebilirsiniz."
+                : reason === "provider_exhausted"
+                  ? "AI sağlayıcıları geçici olarak kullanılamıyor. Lütfen biraz sonra tekrar deneyin."
+                  : body?.error || `Sunucu hatası (${res.status})`;
+          throw new Error(friendly);
         }
         const data = (await res.json()) as { plan: TravelPlan };
         if (!data?.plan?.id) throw new Error("Plan oluşturulamadı");
