@@ -148,6 +148,21 @@ export interface CountryRule {
   notes?: string[];
 }
 
+export interface PlanNarrative {
+  glanceTitle: string;
+  emotionalSummary: string;
+  whyPerfectForYou: string[];
+  whatMakesUnique: string[];
+  signatureMoments?: string[];
+}
+
+export interface PlanReasoning {
+  routeRationale?: string;
+  pacingRationale?: string;
+  budgetRationale?: string;
+  personalizationNotes?: string[];
+}
+
 export interface DayWeather {
   date: string;
   city: string;
@@ -192,4 +207,7 @@ export interface TravelPlan {
   };
 
   weather: DayWeather[];
+
+  narrative?: PlanNarrative;
+  reasoning?: PlanReasoning;
 }

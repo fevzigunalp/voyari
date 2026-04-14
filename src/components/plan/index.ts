@@ -10,3 +10,5 @@ export { ChecklistPanel } from "./ChecklistPanel";
 export { WeatherStrip } from "./WeatherStrip";
 export { AlternativePlan } from "./AlternativePlan";
 export { ExportButton } from "./ExportButton";
+export { PlanNarrative } from "./PlanNarrative";
+export { RefineChat } from "./RefineChat";

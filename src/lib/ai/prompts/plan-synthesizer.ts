@@ -83,4 +83,24 @@ HotelRec: { name, stars, rating, pricePerNight, currency, location, highlights[]
 MealRec: { restaurantName, cuisine, mustTry, pricePerPerson, currency, location, reservationNeeded, coordinates }
 ChecklistItem: { id, label, category, done: false, essential }
 
-Hiçbir alanı boş bırakma — eksik olanları makul varsayımla doldur.`;
+Hiçbir alanı boş bırakma — eksik olanları makul varsayımla doldur.
+
+=== EDİTORYEL KATMAN (ZORUNLU) ===
+
+TravelPlan JSON'una ek olarak şu iki alanı da doldur:
+
+"narrative": {
+  "glanceTitle": string,          // örn. "Bodrum'da 7 gün: Mavi sessizlik" — şiirsel, destinasyon + süre + his
+  "emotionalSummary": string,     // 2-3 cümle, premium dergi tadında editoryal özet. "Bu seyahat..." diye başlayabilir.
+  "whyPerfectForYou": [string],   // 3-5 madde. KULLANICININ profili (bütçe seviyesi, ulaşım, ilgi alanları, tempo, seyahatçi tipi) ile DOĞRUDAN bağlantılı. Örn. "Tempo tercihiniz 'relaxed' olduğu için günde tek bir ana rota bıraktık."
+  "whatMakesUnique": [string],    // 3-5 madde. Bu plandaki imza anları/özel detayları vurgula.
+  "signatureMoments": [string]    // opsiyonel, 2-3 küçük detay
+},
+"reasoning": {
+  "routeRationale": string,        // neden bu rota
+  "pacingRationale": string,       // neden bu tempo
+  "budgetRationale": string,       // bütçe mantığı
+  "personalizationNotes": [string] // 2-4 kısa not: profile'dan hangi sinyalleri nasıl kullandın
+}
+
+Ton: Premium concierge. Türkçe. Fazla satış dili YOK. Sahici, sıcak, somut. Jenerik değil — profiline referans ver (bütçe seviyesi, ulaşım türü, ilgi alanları, pace). Asla "harika bir seyahat" gibi boş laf kullanma.`;

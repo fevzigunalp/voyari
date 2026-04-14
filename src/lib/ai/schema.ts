@@ -237,9 +237,32 @@ const DayWeather = z
   .partial()
   .passthrough();
 
+const PlanNarrative = z
+  .object({
+    glanceTitle: z.string().default(""),
+    emotionalSummary: z.string().default(""),
+    whyPerfectForYou: z.array(z.string()).default([]),
+    whatMakesUnique: z.array(z.string()).default([]),
+    signatureMoments: z.array(z.string()).optional(),
+  })
+  .partial()
+  .passthrough();
+
+const PlanReasoning = z
+  .object({
+    routeRationale: z.string().optional(),
+    pacingRationale: z.string().optional(),
+    budgetRationale: z.string().optional(),
+    personalizationNotes: z.array(z.string()).optional(),
+  })
+  .partial()
+  .passthrough();
+
 export const TravelPlanSchema = z
   .object({
     id: z.string().optional(),
+    narrative: PlanNarrative.optional(),
+    reasoning: PlanReasoning.optional(),
     profile: z.unknown().optional(),
     createdAt: z.string().optional(),
     route: z
