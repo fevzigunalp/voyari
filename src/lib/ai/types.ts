@@ -29,6 +29,8 @@ export interface CallOptions {
   webSearch?: boolean;
   /** Max output tokens. */
   maxTokens?: number;
+  /** Override the global primary provider for this single call. */
+  overridePrimary?: ProviderName;
 }
 
 export interface CallResult<T> {

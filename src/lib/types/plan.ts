@@ -210,4 +210,9 @@ export interface TravelPlan {
 
   narrative?: PlanNarrative;
   reasoning?: PlanReasoning;
+
+  /** True when synthesis degraded and one or more sections are stubs. */
+  partial?: boolean;
+  /** Agent ids whose results are safe-fallback stubs. */
+  partialAgents?: string[];
 }

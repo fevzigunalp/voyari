@@ -15,6 +15,8 @@ export interface ResearchAgentDef {
   systemPrompt: string;
   useWebSearch: boolean;
   dependsOnOthers: boolean;
+  /** Optional per-agent timeout override (ms). */
+  timeoutMs?: number;
   inputBuilder: (
     profile: TravelerProfile,
     priorResults?: Partial<Record<ResearchAgentId, unknown>>,
@@ -59,6 +61,7 @@ export const AGENTS: ResearchAgentDef[] = [
     systemPrompt: WEATHER_AGENT_PROMPT,
     useWebSearch: true,
     dependsOnOthers: false,
+    timeoutMs: 30_000,
     inputBuilder: (profile) =>
       `Aşağıdaki seyahat için günlük hava durumu tahmini çıkar.\n\nProfile:\n${profileSummary(profile)}\n\nSadece JSON döndür.`,
   },
@@ -99,6 +102,7 @@ export const AGENTS: ResearchAgentDef[] = [
     systemPrompt: LOGISTICS_AGENT_PROMPT,
     useWebSearch: true,
     dependsOnOthers: false,
+    timeoutMs: 90_000,
     inputBuilder: (profile) =>
       `Aşağıdaki seyahat için lojistik (vize, sürüş kuralları, checklist, sigorta...) hazırla.\n\nProfile:\n${profileSummary(profile)}\n\nSadece JSON döndür.`,
   },
@@ -109,6 +113,7 @@ export const AGENTS: ResearchAgentDef[] = [
     systemPrompt: BUDGET_AGENT_PROMPT,
     useWebSearch: true,
     dependsOnOthers: true,
+    timeoutMs: 90_000,
     inputBuilder: (profile, priorResults) =>
       `Aşağıdaki profile ve diğer ajan çıktılarına göre bütçe analizini çıkar.\n\nProfile:\n${profileSummary(profile)}\n\nOtherAgents:\n${JSON.stringify(priorResults ?? {}, null, 2).slice(0, 14000)}\n\nSadece JSON döndür.`,
   },

@@ -180,7 +180,7 @@ export async function generateObject<T>(
   opts: CallOptions,
   schema: ZodType<T>,
 ): Promise<CallResult<T>> {
-  const primary = readPrimary();
+  const primary: ProviderName = opts.overridePrimary ?? readPrimary();
   const fallback: ProviderName = primary === "gemini" ? "anthropic" : "gemini";
   const providersTried: ProviderName[] = [];
 

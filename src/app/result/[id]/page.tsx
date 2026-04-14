@@ -112,6 +112,14 @@ export default function ResultPage({
           id="voyari-plan-export-root"
           className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12"
         >
+          {plan.partial && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+            >
+              Plan kısmi içerik içeriyor — RefineChat ile düzenleyebilirsiniz.
+            </div>
+          )}
           <div className="flex justify-end mb-4">
             <ExportButton plan={plan} />
           </div>

@@ -41,11 +41,19 @@ export default function PlanPage() {
     async (research: ResearchBundle) => {
       setPhase("generating");
       try {
-        const res = await fetch("/api/generate-plan", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ profile, research }),
-        });
+        let res: Response;
+        try {
+          res = await fetch("/api/generate-plan", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ profile, research }),
+          });
+        } catch {
+          // Blanket network-layer catch — never surface raw TypeError to UI.
+          throw new Error(
+            "Bağlantı geçici olarak kesildi, tekrar deneyin.",
+          );
+        }
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           const reason = typeof body?.reason === "string" ? body.reason : "";
@@ -56,15 +64,27 @@ export default function PlanPage() {
                 ? "AI sağlayıcısı geç cevap verdi. Tekrar deneyebilirsiniz."
                 : reason === "provider_exhausted"
                   ? "AI sağlayıcıları geçici olarak kullanılamıyor. Lütfen biraz sonra tekrar deneyin."
-                  : body?.error || `Sunucu hatası (${res.status})`;
+                  : typeof body?.error === "string" && body.error
+                    ? body.error
+                    : "Plan şu an oluşturulamadı, tekrar deneyin.";
           throw new Error(friendly);
         }
-        const data = (await res.json()) as { plan: TravelPlan };
+        const data = (await res.json()) as {
+          plan: TravelPlan;
+          partial?: boolean;
+        };
         if (!data?.plan?.id) throw new Error("Plan oluşturulamadı");
         savePlan(data.plan);
-        router.push(`/result/${data.plan.id}`);
+        const suffix =
+          data.partial || data.plan.partial ? "?partial=1" : "";
+        router.push(`/result/${data.plan.id}${suffix}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
+        const raw = err instanceof Error ? err.message : "";
+        const isNetworky =
+          /fetch failed|networkerror|failed to fetch|load failed/i.test(raw);
+        const msg = isNetworky
+          ? "Bağlantı geçici olarak kesildi, tekrar deneyin."
+          : raw || "Plan şu an oluşturulamadı, tekrar deneyin.";
         setError(msg);
         setPhase("error");
       }

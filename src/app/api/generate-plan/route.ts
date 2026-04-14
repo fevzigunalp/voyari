@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import { synthesizePlan, type ResearchResults } from "@/lib/ai/plan-generator";
-import { buildAiErrorResponse } from "@/lib/ai/errors";
 
 export const runtime = "edge";
 export const maxDuration = 300;
@@ -27,12 +26,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  try {
-    const plan = await synthesizePlan(body.profile, body.research);
-    plan.id = crypto.randomUUID();
-    plan.createdAt = new Date().toISOString();
-    return Response.json({ plan });
-  } catch (err) {
-    return buildAiErrorResponse(err, "/api/generate-plan");
-  }
+  // synthesizePlan never throws — returns a (maybe-partial) plan.
+  const plan = await synthesizePlan(body.profile, body.research);
+  plan.id = plan.id || crypto.randomUUID();
+  plan.createdAt = plan.createdAt || new Date().toISOString();
+
+  return Response.json({ plan, partial: plan.partial === true });
 }
