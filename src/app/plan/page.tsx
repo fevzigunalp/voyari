@@ -6,15 +6,22 @@ import { Header } from "@/components/layout/Header";
 import { ElicitationEngine } from "@/components/elicitation";
 import { EntryChooser, type EntryMode } from "@/components/elicitation/EntryChooser";
 import { DreamInput } from "@/components/elicitation/DreamInput";
-import { ResearchDashboard } from "@/components/research";
-import { useTravelStore, type ResearchBundle } from "@/lib/store/travel-store";
+import { useTravelStore } from "@/lib/store/travel-store";
 import { usePlanStore } from "@/lib/store/plan-store";
 import { useElicitationStore } from "@/lib/store/elicitation-store";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import type { TravelPlan } from "@/lib/types/plan";
 import type { ExtractedIntent } from "@/lib/ai/schema";
 
-type Phase = "elicitation" | "research" | "generating" | "error";
+type Phase = "elicitation" | "generating" | "error";
+
+interface CoreResponse {
+  planId: string;
+  plan: TravelPlan | null;
+  partial?: boolean;
+  timedOut?: boolean;
+  error?: string;
+}
 
 export default function PlanPage() {
   const router = useRouter();
@@ -25,10 +32,6 @@ export default function PlanPage() {
   const savePlan = usePlanStore((s) => s.savePlan);
   const hydrateFromIntent = useElicitationStore((s) => s.hydrateFromIntent);
 
-  const handleElicitationComplete = useCallback(() => {
-    setPhase("research");
-  }, []);
-
   const handleIntentExtracted = useCallback(
     (intent: ExtractedIntent) => {
       hydrateFromIntent(intent);
@@ -37,74 +40,32 @@ export default function PlanPage() {
     [hydrateFromIntent],
   );
 
-  const handleResearchComplete = useCallback(
-    async (research: ResearchBundle) => {
-      setPhase("generating");
-      try {
-        let res: Response;
-        try {
-          res = await fetch("/api/generate-plan", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ profile, research }),
-          });
-        } catch {
-          // Blanket network-layer catch — never surface raw TypeError to UI.
-          throw new Error(
-            "Bağlantı geçici olarak kesildi, tekrar deneyin.",
-          );
-        }
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          const reason = typeof body?.reason === "string" ? body.reason : "";
-          const friendly =
-            reason === "rate_limited"
-              ? "Sistem şu an yoğun. Birkaç saniye sonra tekrar deneyin."
-              : reason === "timeout"
-                ? "AI sağlayıcısı geç cevap verdi. Tekrar deneyebilirsiniz."
-                : reason === "provider_exhausted"
-                  ? "AI sağlayıcıları geçici olarak kullanılamıyor. Lütfen biraz sonra tekrar deneyin."
-                  : typeof body?.error === "string" && body.error
-                    ? body.error
-                    : "Plan şu an oluşturulamadı, tekrar deneyin.";
-          throw new Error(friendly);
-        }
-        const data = (await res.json()) as {
-          plan?: TravelPlan;
-          partial?: boolean;
-          status?: "complete" | "partial" | "failed";
-        };
-        // Only throw if the server returned no plan body at all OR explicitly
-        // signaled total failure. A partial plan without id → fabricate one.
-        if (!data?.plan || data.status === "failed") {
-          throw new Error("Plan şu an oluşturulamadı, tekrar deneyin.");
-        }
-        const plan = data.plan;
-        if (!plan.id) {
-          plan.id =
-            typeof crypto !== "undefined" && "randomUUID" in crypto
-              ? crypto.randomUUID()
-              : `plan_${Date.now()}`;
-        }
-        savePlan(plan);
-        const suffix =
-          data.partial || data.status === "partial" || plan.partial
-            ? "?partial=1"
-            : "";
-        router.push(`/result/${plan.id}${suffix}`);
-      } catch (err) {
-        const raw = err instanceof Error ? err.message : "";
-        const isNetworky =
-          /fetch failed|networkerror|failed to fetch|load failed/i.test(raw);
-        const msg = isNetworky
-          ? "Bağlantı geçici olarak kesildi, tekrar deneyin."
-          : raw || "Plan şu an oluşturulamadı, tekrar deneyin.";
-        setError(msg);
-        setPhase("error");
+  const handleElicitationComplete = useCallback(async () => {
+    setPhase("generating");
+    setError(null);
+    try {
+      const res = await fetch("/api/plan/core", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profile }),
+      });
+      if (!res.ok) {
+        throw new Error("Plan iskeleti oluşturulamadı, tekrar deneyin.");
       }
-    },
-    [profile, router, savePlan],
-  );
+      const data = (await res.json()) as CoreResponse;
+      if (!data?.plan) {
+        throw new Error("Plan iskeleti oluşturulamadı, tekrar deneyin.");
+      }
+      const plan = data.plan;
+      if (!plan.id) plan.id = data.planId;
+      savePlan(plan);
+      router.push(`/result/${plan.id}?streaming=1`);
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : "";
+      setError(raw || "Plan iskeleti oluşturulamadı, tekrar deneyin.");
+      setPhase("error");
+    }
+  }, [profile, router, savePlan]);
 
   return (
     <>
@@ -122,22 +83,17 @@ export default function PlanPage() {
         {phase === "elicitation" && entryMode === "structured" && (
           <ElicitationEngine onComplete={handleElicitationComplete} />
         )}
-        {phase === "research" && (
-          <ResearchDashboard
-            profile={profile as TravelerProfile}
-            onComplete={handleResearchComplete}
-          />
-        )}
         {phase === "generating" && (
           <div className="mx-auto max-w-2xl px-4 py-24 text-center">
             <div className="inline-block animate-glow-pulse rounded-2xl border border-[rgba(212,168,83,0.4)] bg-[rgba(26,31,53,0.6)] px-8 py-10">
               <div className="text-5xl animate-float">✨</div>
               <h2 className="font-display text-2xl mt-4 text-gradient-gold">
-                Plan Hazırlanıyor
+                Plan iskeleti hazırlanıyor...
               </h2>
               <p className="text-sm text-text-secondary mt-2">
-                Araştırma sonuçları nihai rota, bütçe ve önerilere
-                dönüştürülüyor. Bu birkaç dakika sürebilir.
+                Rota ve ana gün akışı birkaç saniye içinde hazır olacak. Ardından
+                konaklama, restoran, aktivite, lojistik, bütçe ve hava detayları
+                paralel olarak yüklenir.
               </p>
             </div>
           </div>
@@ -150,7 +106,10 @@ export default function PlanPage() {
               </h2>
               <p className="text-sm text-text-secondary mt-2">{error}</p>
               <button
-                onClick={() => setPhase("research")}
+                onClick={() => {
+                  setPhase("elicitation");
+                  setEntryMode("structured");
+                }}
                 className="mt-5 rounded-xl border border-[rgba(212,168,83,0.4)] px-5 py-2 text-sm text-text-primary hover:bg-white/5"
               >
                 Tekrar Dene
@@ -162,3 +121,6 @@ export default function PlanPage() {
     </>
   );
 }
+
+// Reference TravelerProfile for strict-mode import preservation.
+export type _PlanProfileRef = TravelerProfile;

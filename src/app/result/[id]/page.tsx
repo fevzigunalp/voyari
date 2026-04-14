@@ -2,8 +2,8 @@
 
 export const runtime = "edge";
 
-import { use, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -28,8 +28,9 @@ import {
   AlternativePlan,
   ExportButton,
   RefineChat,
+  SectionSkeleton,
 } from "@/components/plan";
-import { usePlanStore } from "@/lib/store/plan-store";
+import { usePlanStore, type PlanSliceSection } from "@/lib/store/plan-store";
 import { cn } from "@/lib/utils/cn";
 
 const RouteMap = dynamic(() => import("@/components/plan/RouteMap"), {
@@ -54,6 +55,14 @@ const OP_TABS: Array<{ key: OpTab; label: string; icon: typeof MapIcon }> = [
   { key: "weather", label: "Hava", icon: CloudSun },
 ];
 
+function loadingSliceCount(
+  status: Partial<Record<PlanSliceSection, string>>,
+): number {
+  return (
+    ["hotels", "restaurants", "activities", "logistics", "budget", "weather"] as const
+  ).filter((s) => status[s] === "loading" || status[s] === "pending").length;
+}
+
 export default function ResultPage({
   params,
 }: {
@@ -61,16 +70,86 @@ export default function ResultPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const streaming = searchParams?.get("streaming") === "1";
   const plan = usePlanStore((s) => s.plans[id]);
+  const mergePlanSlice = usePlanStore((s) => s.mergePlanSlice);
+  const setSliceStatus = usePlanStore((s) => s.setSliceStatus);
+  const sliceStatus = usePlanStore((s) => s.sliceStatus[id] ?? {});
   const [opTab, setOpTab] = useState<OpTab>("map");
   const [activeDay, setActiveDay] = useState(0);
   const [opOpen, setOpOpen] = useState<boolean>(true);
+  const startedRef = useRef(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setOpOpen(window.matchMedia("(min-width: 768px)").matches);
     }
   }, []);
+
+  // Progressive enrichment: fire 6 parallel fetches when arriving in streaming mode.
+  useEffect(() => {
+    if (!streaming) return;
+    if (!plan) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    const sections: PlanSliceSection[] = [
+      "hotels",
+      "restaurants",
+      "activities",
+      "logistics",
+      "budget",
+      "weather",
+    ];
+
+    const overallController = new AbortController();
+    const overallTimer = setTimeout(() => overallController.abort(), 45_000);
+
+    Promise.allSettled(
+      sections.map(async (section) => {
+        setSliceStatus(id, section, "loading");
+        try {
+          const res = await fetch(`/api/plan/${section}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              profile: plan.profile,
+              planId: id,
+            }),
+            signal: overallController.signal,
+          });
+          if (!res.ok) throw new Error(`status_${res.status}`);
+          const body = (await res.json()) as {
+            section?: PlanSliceSection;
+            data?: unknown;
+          };
+          if (body?.data) {
+            mergePlanSlice(id, section, body.data);
+          } else {
+            setSliceStatus(id, section, "error");
+          }
+        } catch {
+          setSliceStatus(id, section, "error");
+        }
+      }),
+    ).finally(() => {
+      clearTimeout(overallTimer);
+      // Router: drop the streaming flag so a refresh does not re-fire fetches.
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("streaming");
+        window.history.replaceState({}, "", url.toString());
+      }
+    });
+
+    return () => {
+      clearTimeout(overallTimer);
+      overallController.abort();
+    };
+    // plan only needed on first render; id/streaming drive the effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, streaming]);
 
   const days = useMemo(() => plan?.days ?? [], [plan]);
   const current = days[activeDay];
@@ -112,7 +191,28 @@ export default function ResultPage({
           id="voyari-plan-export-root"
           className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12"
         >
-          {plan.partial && (
+          {(() => {
+            const loadingSections = (
+              ["hotels", "restaurants", "activities", "logistics", "budget", "weather"] as const
+            ).filter(
+              (s) => sliceStatus[s] === "loading" || sliceStatus[s] === "pending",
+            );
+            if (loadingSections.length === 0) return null;
+            return (
+              <div
+                role="status"
+                className="mb-4 flex items-center gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              >
+                <SectionSkeleton compact label="Detaylar yükleniyor" />
+                <span>
+                  {loadingSections.length} bölüm arka planda hazırlanıyor. Plan
+                  ana iskeleti hazır — detaylar geldikçe otomatik olarak
+                  güncellenecek.
+                </span>
+              </div>
+            );
+          })()}
+          {plan.partial && loadingSliceCount(sliceStatus) === 0 && (
             <div
               role="status"
               className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
@@ -175,7 +275,21 @@ export default function ResultPage({
               <div className="flex flex-col gap-5">
                 {current ? (
                   <>
-                    <DayCard day={current} currency={currency} />
+                    <DayCard
+                      day={current}
+                      currency={currency}
+                      pending={{
+                        hotels:
+                          sliceStatus.hotels === "loading" ||
+                          sliceStatus.hotels === "pending",
+                        restaurants:
+                          sliceStatus.restaurants === "loading" ||
+                          sliceStatus.restaurants === "pending",
+                        activities:
+                          sliceStatus.activities === "loading" ||
+                          sliceStatus.activities === "pending",
+                      }}
+                    />
                     <DayMap day={current} />
                   </>
                 ) : (

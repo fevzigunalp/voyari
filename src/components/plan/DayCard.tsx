@@ -7,13 +7,20 @@ import { Card } from "@/components/ui/Card";
 import { ActivityItem } from "./ActivityItem";
 import { HotelCard } from "./HotelCard";
 import { RestaurantCard } from "./RestaurantCard";
+import { SectionSkeleton } from "./SectionSkeleton";
 
 export interface DayCardProps {
   day: DayPlan;
   currency?: string;
+  /** Per-section pending flags — when true, render skeleton pill instead. */
+  pending?: {
+    hotels?: boolean;
+    restaurants?: boolean;
+    activities?: boolean;
+  };
 }
 
-export function DayCard({ day, currency }: DayCardProps) {
+export function DayCard({ day, currency, pending }: DayCardProps) {
   const timeline = day.timeline ?? [];
   const tips = day.tips ?? [];
   const primaryHotel = day.accommodation?.primary;
@@ -94,11 +101,14 @@ export function DayCard({ day, currency }: DayCardProps) {
         )}
       </Card>
 
-      {timeline.length > 0 && (
+      {(timeline.length > 0 || pending?.activities) && (
         <Card variant="default">
-          <h3 className="font-display text-lg text-text-primary mb-3">
-            Zaman Çizelgesi
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-lg text-text-primary">
+              Zaman Çizelgesi
+            </h3>
+            {pending?.activities && <SectionSkeleton compact />}
+          </div>
           <div className="flex flex-col gap-2">
             {timeline.map((t, i) => (
               <ActivityItem key={`${t.time}-${i}`} item={t} />
@@ -107,20 +117,26 @@ export function DayCard({ day, currency }: DayCardProps) {
         </Card>
       )}
 
-      {primaryHotel && (
+      {(primaryHotel || pending?.hotels) && (
         <Card variant="default">
-          <h3 className="font-display text-lg text-text-primary mb-3">
-            Konaklama
-          </h3>
-          <HotelCard hotel={primaryHotel} />
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-lg text-text-primary">
+              Konaklama
+            </h3>
+            {pending?.hotels && <SectionSkeleton compact />}
+          </div>
+          {primaryHotel && <HotelCard hotel={primaryHotel} />}
         </Card>
       )}
 
-      {(meals.breakfast || meals.lunch || meals.dinner) && (
+      {(meals.breakfast || meals.lunch || meals.dinner || pending?.restaurants) && (
         <Card variant="default">
-          <h3 className="font-display text-lg text-text-primary mb-3">
-            Yemek Önerileri
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-lg text-text-primary">
+              Yemek Önerileri
+            </h3>
+            {pending?.restaurants && <SectionSkeleton compact />}
+          </div>
           <div className="grid gap-3 md:grid-cols-3">
             {meals.breakfast && (
               <RestaurantCard meal={meals.breakfast} label="Kahvaltı" />

@@ -12,3 +12,4 @@ export { AlternativePlan } from "./AlternativePlan";
 export { ExportButton } from "./ExportButton";
 export { PlanNarrative } from "./PlanNarrative";
 export { RefineChat } from "./RefineChat";
+export { SectionSkeleton } from "./SectionSkeleton";
