@@ -4,24 +4,38 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { ElicitationEngine } from "@/components/elicitation";
+import { EntryChooser, type EntryMode } from "@/components/elicitation/EntryChooser";
+import { DreamInput } from "@/components/elicitation/DreamInput";
 import { ResearchDashboard } from "@/components/research";
 import { useTravelStore, type ResearchBundle } from "@/lib/store/travel-store";
 import { usePlanStore } from "@/lib/store/plan-store";
+import { useElicitationStore } from "@/lib/store/elicitation-store";
 import type { TravelerProfile } from "@/lib/types/traveler-profile";
 import type { TravelPlan } from "@/lib/types/plan";
+import type { ExtractedIntent } from "@/lib/ai/schema";
 
 type Phase = "elicitation" | "research" | "generating" | "error";
 
 export default function PlanPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("elicitation");
+  const [entryMode, setEntryMode] = useState<EntryMode>("choose");
   const [error, setError] = useState<string | null>(null);
   const profile = useTravelStore((s) => s.profile);
   const savePlan = usePlanStore((s) => s.savePlan);
+  const hydrateFromIntent = useElicitationStore((s) => s.hydrateFromIntent);
 
   const handleElicitationComplete = useCallback(() => {
     setPhase("research");
   }, []);
+
+  const handleIntentExtracted = useCallback(
+    (intent: ExtractedIntent) => {
+      hydrateFromIntent(intent);
+      setEntryMode("structured");
+    },
+    [hydrateFromIntent],
+  );
 
   const handleResearchComplete = useCallback(
     async (research: ResearchBundle) => {
@@ -53,7 +67,16 @@ export default function PlanPage() {
     <>
       <Header />
       <main className="flex-1">
-        {phase === "elicitation" && (
+        {phase === "elicitation" && entryMode === "choose" && (
+          <EntryChooser onSelect={(mode) => setEntryMode(mode)} />
+        )}
+        {phase === "elicitation" && entryMode === "dream" && (
+          <DreamInput
+            onBack={() => setEntryMode("choose")}
+            onExtracted={handleIntentExtracted}
+          />
+        )}
+        {phase === "elicitation" && entryMode === "structured" && (
           <ElicitationEngine onComplete={handleElicitationComplete} />
         )}
         {phase === "research" && (

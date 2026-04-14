@@ -283,3 +283,63 @@ export const TravelPlanSchema = z
   .passthrough();
 
 export type TravelPlanSchemaType = z.infer<typeof TravelPlanSchema>;
+
+/**
+ * ExtractedIntentSchema — lax schema for free-text dream onboarding.
+ * All fields optional / nullable. Used by /api/extract-intent to hydrate
+ * the elicitation store non-destructively.
+ */
+const NullableString = z.string().nullish();
+const NullableNumber = z.number().nullish();
+
+export const ExtractedIntentSchema = z
+  .object({
+    startDate: NullableString,
+    endDate: NullableString,
+    totalDays: NullableNumber,
+    destinationQuery: NullableString,
+    departureQuery: NullableString,
+    travelersAdults: NullableNumber,
+    travelersChildren: NullableNumber,
+    travelerType: z
+      .enum(["solo", "couple", "family", "friends", "group"])
+      .nullish(),
+    budgetLevel: z
+      .enum(["budget", "moderate", "comfortable", "luxury", "unlimited"])
+      .nullish(),
+    transportType: z
+      .enum([
+        "plane",
+        "car",
+        "caravan",
+        "gulet",
+        "train",
+        "cruise",
+        "bicycle",
+        "trekking",
+        "mixed",
+      ])
+      .nullish(),
+    accommodationType: z
+      .enum([
+        "luxury",
+        "5star",
+        "4star",
+        "boutique",
+        "airbnb",
+        "hostel",
+        "camping",
+        "mixed",
+      ])
+      .nullish(),
+    interestKeywords: z.array(z.string()).nullish(),
+    pace: z.enum(["packed", "balanced", "relaxed"]).nullish(),
+    foodStyle: z
+      .enum(["local_explorer", "familiar", "self_cooking", "mixed"])
+      .nullish(),
+    notes: NullableString,
+  })
+  .partial()
+  .passthrough();
+
+export type ExtractedIntent = z.infer<typeof ExtractedIntentSchema>;

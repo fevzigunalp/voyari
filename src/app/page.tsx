@@ -5,6 +5,7 @@ import {
   FeatureGrid,
   TestimonialSlider,
 } from "@/components/landing";
+import { InspireTeaser } from "@/components/discovery/InspireTeaser";
 
 export default function Home() {
   return (
@@ -13,6 +14,7 @@ export default function Home() {
       <main className="flex-1">
         <HeroSection />
         <FeatureGrid />
+        <InspireTeaser />
         <TestimonialSlider />
       </main>
       <Footer />

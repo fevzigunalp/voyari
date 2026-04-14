@@ -475,6 +475,9 @@ export function ElicitationEngine({ onComplete }: ElicitationEngineProps = {}) {
     goNext,
     goBack,
     setHistory,
+    setCurrentIndex,
+    prefilledKeys,
+    reset,
   } = useElicitationStore();
   const setProfile = useTravelStore((s) => s.setProfile);
 
@@ -485,6 +488,23 @@ export function ElicitationEngine({ onComplete }: ElicitationEngineProps = {}) {
   useEffect(() => {
     setHistory(flow);
   }, [flowKey, flow, setHistory]);
+
+  // On mount: if we have prefilled answers, jump to the first unanswered step.
+  const [didAutoJump, setDidAutoJump] = useState(false);
+  useEffect(() => {
+    if (didAutoJump) return;
+    if (prefilledKeys.length === 0) {
+      setDidAutoJump(true);
+      return;
+    }
+    const firstUnanswered = flow.findIndex(
+      (id) => !isAnswered(id, answers[id]),
+    );
+    if (firstUnanswered > 0) setCurrentIndex(firstUnanswered);
+    setDidAutoJump(true);
+  }, [didAutoJump, prefilledKeys, flow, answers, setCurrentIndex]);
+
+  const hasPrefill = prefilledKeys.length > 0;
 
   const safeIndex = Math.min(currentIndex, flow.length - 1);
   const currentId = flow[safeIndex];
@@ -525,6 +545,27 @@ export function ElicitationEngine({ onComplete }: ElicitationEngineProps = {}) {
           />
         </div>
       </div>
+
+      {hasPrefill && (
+        <div className="mx-auto max-w-3xl w-full px-4 pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(212,168,83,0.25)] bg-[rgba(212,168,83,0.06)] px-4 py-2.5 text-xs text-text-secondary">
+            <span className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-[rgba(212,168,83,0.9)]" />
+              Bazı alanları sizin için önceden doldurduk. Düzenleyebilirsiniz.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setDidAutoJump(false);
+              }}
+              className="text-[11px] uppercase tracking-[0.18em] text-[rgba(212,168,83,0.9)] hover:text-[rgba(232,201,122,1)]"
+            >
+              Temizle
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex items-start justify-center px-4 py-10 sm:py-16">
         <div className="w-full">

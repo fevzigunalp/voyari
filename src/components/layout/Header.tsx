@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/Button";
 
 const NAV = [
   { href: "/", label: "Ana Sayfa" },
+  { href: "/inspire", label: "İlham" },
   { href: "/plan", label: "Tatil Tasarla" },
-  { href: "#features", label: "Nasıl Çalışır" },
+  { href: "/saved", label: "Kaydettiklerim" },
+  { href: "/#features", label: "Nasıl Çalışır" },
 ];
 
 export function Header() {
