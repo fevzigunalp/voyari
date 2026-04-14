@@ -70,29 +70,29 @@ export interface AgentUpdate {
   data?: unknown;
   provider?: string;
   partial?: boolean;
-  phase?: 1 | 2 | 3;
+  phase?: 1 | 2;
 }
 
 /**
- * PHASED ORCHESTRATION
+ * PHASED ORCHESTRATION (simplified for stability)
  *
- * Phase 1 — Foundation (sequential blocking): route → logistics
- *   These are prerequisites; every later phase uses their data.
- * Phase 2 — Content (bounded parallel after Phase 1): accommodation, activity, restaurant
- *   May overlap but capped by AI_MAX_CONCURRENCY; only starts once Phase 1
- *   reaches a usable state (done or safe-fallback).
- * Phase 3 — Enrichment (sequential after Phase 2): weather → budget
- *   Budget depends on every prior section; runs last.
+ * Phase 1 — Foundation (blocking): route
+ *   Provides the route skeleton (day-by-day waypoint structure) that all
+ *   downstream content attaches to.
+ * Phase 2 — Enrichment (bounded parallel): everything else
+ *   accommodation, activity, restaurant, logistics, weather, budget.
+ *   No strict inter-agent dependencies — each falls back safely if it fails.
+ *
+ * Priorities: stability > completeness > clarity > intelligence.
  */
-export const PHASE_AGENTS: Record<1 | 2 | 3, ResearchAgentId[]> = {
-  1: ["route", "logistics"],
-  2: ["accommodation", "activity", "restaurant"],
-  3: ["weather", "budget"],
+export const PHASE_AGENTS: Record<1 | 2, ResearchAgentId[]> = {
+  1: ["route"],
+  2: ["logistics", "accommodation", "activity", "restaurant", "weather", "budget"],
 };
 
 export interface PhaseEvent {
   type: "phase";
-  phase: 1 | 2 | 3;
+  phase: 1 | 2;
   status: "start" | "complete";
   agents: ResearchAgentId[];
 }
@@ -233,8 +233,8 @@ export async function runResearch(
   const agentById = new Map<ResearchAgentId, ResearchAgentDef>(
     AGENTS.map((a) => [a.id, a]),
   );
-  const phaseOf = (id: ResearchAgentId): 1 | 2 | 3 =>
-    PHASE_AGENTS[1].includes(id) ? 1 : PHASE_AGENTS[2].includes(id) ? 2 : 3;
+  const phaseOf = (id: ResearchAgentId): 1 | 2 =>
+    PHASE_AGENTS[1].includes(id) ? 1 : 2;
 
   for (const a of AGENTS) {
     onAgentUpdate?.({ agent: a.id, status: "pending", phase: phaseOf(a.id) });
@@ -305,9 +305,9 @@ export async function runResearch(
     }
   };
 
-  // --- PHASE 1 — sequential blocking: route, logistics ---
+  // --- PHASE 1 — Foundation (route skeleton) ---
   onPhase?.({ type: "phase", phase: 1, status: "start", agents: PHASE_AGENTS[1] });
-  logAi({ phase: "start", message: "phase=1 agents=route,logistics mode=sequential" });
+  logAi({ phase: "start", message: "phase=1 agents=route mode=blocking" });
   for (const id of PHASE_AGENTS[1]) {
     const a = agentById.get(id);
     if (a) await runOne(a);
@@ -315,9 +315,12 @@ export async function runResearch(
   onPhase?.({ type: "phase", phase: 1, status: "complete", agents: PHASE_AGENTS[1] });
   logAi({ phase: "success", message: "phase=1 complete" });
 
-  // --- PHASE 2 — bounded parallel after Phase 1 ---
+  // --- PHASE 2 — Enrichment (all other agents, bounded parallel) ---
   onPhase?.({ type: "phase", phase: 2, status: "start", agents: PHASE_AGENTS[2] });
-  logAi({ phase: "start", message: "phase=2 agents=accommodation,activity,restaurant mode=bounded-parallel" });
+  logAi({
+    phase: "start",
+    message: "phase=2 agents=logistics,accommodation,activity,restaurant,weather,budget mode=bounded-parallel",
+  });
   const concurrency = Math.max(1, Number(process.env.AI_MAX_CONCURRENCY) || 3);
   const limit = createLimiter(concurrency);
   await Promise.all(
@@ -328,16 +331,6 @@ export async function runResearch(
   );
   onPhase?.({ type: "phase", phase: 2, status: "complete", agents: PHASE_AGENTS[2] });
   logAi({ phase: "success", message: "phase=2 complete" });
-
-  // --- PHASE 3 — sequential after Phase 2: weather, budget ---
-  onPhase?.({ type: "phase", phase: 3, status: "start", agents: PHASE_AGENTS[3] });
-  logAi({ phase: "start", message: "phase=3 agents=weather,budget mode=sequential" });
-  for (const id of PHASE_AGENTS[3]) {
-    const a = agentById.get(id);
-    if (a) await runOne(a);
-  }
-  onPhase?.({ type: "phase", phase: 3, status: "complete", agents: PHASE_AGENTS[3] });
-  logAi({ phase: "success", message: "phase=3 complete" });
 
   return results;
 }

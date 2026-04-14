@@ -55,7 +55,7 @@ interface ErrorEvent {
 
 interface PhaseEvent {
   type: "phase";
-  phase: 1 | 2 | 3;
+  phase: 1 | 2;
   status: "start" | "complete";
   agents: ResearchAgentId[];
 }
@@ -109,8 +109,8 @@ export function ResearchDashboard({
     () => initialStates(),
   );
   const [globalError, setGlobalError] = useState<string | null>(null);
-  const [activePhase, setActivePhase] = useState<1 | 2 | 3 | null>(null);
-  const [completedPhases, setCompletedPhases] = useState<Array<1 | 2 | 3>>([]);
+  const [activePhase, setActivePhase] = useState<1 | 2 | null>(null);
+  const [completedPhases, setCompletedPhases] = useState<Array<1 | 2>>([]);
   const setResearch = useTravelStore((s) => s.setResearch);
   const updateResearchAgent = useTravelStore((s) => s.updateResearchAgent);
   const startedRef = useRef(false);
@@ -370,7 +370,7 @@ export function ResearchDashboard({
           Seyahat DNA&apos;nız işleniyor
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          3 fazda sıralı araştırma — her faz bir öncekinin sonucuna dayanıyor.
+          2 fazda araştırma — önce rota, sonra detaylar.
         </p>
       </div>
 
@@ -381,9 +381,8 @@ export function ResearchDashboard({
       />
 
       {([
-        { phase: 1, title: "Faz 1 — Temel", subtitle: "Rota · Lojistik (sıralı)", ids: ["route", "logistics"] as ResearchAgentId[] },
-        { phase: 2, title: "Faz 2 — İçerik", subtitle: "Konaklama · Aktivite · Restoran (paralel)", ids: ["accommodation", "activity", "restaurant"] as ResearchAgentId[] },
-        { phase: 3, title: "Faz 3 — Zenginleştirme", subtitle: "Hava · Bütçe (sıralı)", ids: ["weather", "budget"] as ResearchAgentId[] },
+        { phase: 1, title: "Faz 1 — Temel", subtitle: "Rota iskeleti", ids: ["route"] as ResearchAgentId[] },
+        { phase: 2, title: "Faz 2 — Detaylar", subtitle: "Konaklama · Aktivite · Restoran · Lojistik · Hava · Bütçe (paralel)", ids: ["accommodation", "activity", "restaurant", "logistics", "weather", "budget"] as ResearchAgentId[] },
       ] as const).map((p) => {
         const isActive = activePhase === p.phase;
         const isDone = completedPhases.includes(p.phase);
