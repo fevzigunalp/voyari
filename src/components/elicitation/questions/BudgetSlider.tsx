@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Slider } from "@/components/ui/Slider";
 import { cn } from "@/lib/utils/cn";
 import type { BudgetLevel } from "@/lib/types/traveler-profile";
@@ -28,17 +28,6 @@ export function BudgetSlider({
     const i = LEVELS.findIndex((l) => l.id === value.level);
     return i >= 0 ? i : 1;
   }, [value]);
-
-  useEffect(() => {
-    if (!value) {
-      const lvl = LEVELS[initialIndex];
-      onChange({
-        level: lvl.id,
-        dailyPerPerson: lvl.defaultDaily,
-        currency: "EUR",
-      });
-    }
-  }, [value, initialIndex, onChange]);
 
   const idx = value
     ? Math.max(
