@@ -110,10 +110,11 @@ export default function ResultPage({
       sections.map(async (section) => {
         setSliceStatus(id, section, "loading");
         try {
-          const res = await fetch(`/api/plan/${section}`, {
+          const res = await fetch(`/api/plan/slice`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
+              section,
               profile: plan.profile,
               planId: id,
             }),
