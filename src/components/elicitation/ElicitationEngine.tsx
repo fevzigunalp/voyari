@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/layout/ProgressBar";
 import { useElicitationStore } from "@/lib/store/elicitation-store";
@@ -483,11 +483,15 @@ export function ElicitationEngine({ onComplete }: ElicitationEngineProps = {}) {
 
   const flow = useMemo(() => buildQuestionFlow(answers), [answers]);
 
-  // Keep store history in sync (but only when it actually changes)
+  // Keep store history in sync — key off the stable joined string only
   const flowKey = flow.join("|");
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  const setHistoryRef = useRef(setHistory);
+  setHistoryRef.current = setHistory;
   useEffect(() => {
-    setHistory(flow);
-  }, [flowKey, flow, setHistory]);
+    setHistoryRef.current(flowRef.current);
+  }, [flowKey]);
 
   // On mount: if we have prefilled answers, jump to the first unanswered step.
   const [didAutoJump, setDidAutoJump] = useState(false);
