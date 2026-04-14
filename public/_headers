@@ -1,0 +1,31 @@
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/_next/static/chunks/*.js
+  Content-Type: application/javascript; charset=utf-8
+
+/_next/static/chunks/*.css
+  Content-Type: text/css; charset=utf-8
+
+/_next/static/media/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.js
+  Content-Type: application/javascript; charset=utf-8
+
+/*.css
+  Content-Type: text/css; charset=utf-8
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
