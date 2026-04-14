@@ -37,12 +37,35 @@ export async function POST(req: NextRequest) {
       };
 
       let research: Record<string, unknown> = {};
+      const MAX_WALL_MS = 4 * 60 * 1000; // 4 min guard
+      const wallTimeout = new Promise<"wall-timeout">((resolve) =>
+        setTimeout(() => resolve("wall-timeout"), MAX_WALL_MS),
+      );
       try {
         // runResearch no longer throws — each agent is isolated and falls back
         // to a safe stub. We always reach research-complete.
-        research = (await runResearch(profile, (u: AgentUpdate) => {
-          send(u);
-        })) as Record<string, unknown>;
+        const raceResult = await Promise.race([
+          runResearch(profile, (u: AgentUpdate) => {
+            send(u);
+          }),
+          wallTimeout,
+        ]);
+        if (raceResult === "wall-timeout") {
+          console.error(
+            JSON.stringify({
+              tag: "voyari.api.error",
+              route: "/api/research",
+              message: "wall-time-exceeded",
+            }),
+          );
+          send({
+            type: "warning",
+            error:
+              "Araştırma süresi aşıldı — elde edilen kısmi sonuçlar kullanılacak.",
+          });
+        } else {
+          research = raceResult as Record<string, unknown>;
+        }
       } catch (err) {
         // Defensive — should not happen after hardening.
         console.error(
@@ -55,18 +78,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const hasAny =
-        research && typeof research === "object" && Object.keys(research).length > 0;
-      if (hasAny) {
-        send({ type: "research-complete", research });
-      } else {
-        send({
-          type: "error",
-          error:
-            "AI sağlayıcıları geçici olarak kullanılamıyor. Lütfen biraz sonra tekrar deneyin.",
-          reason: "provider_exhausted",
-        });
-      }
+      // Always close cleanly with research-complete, even if the bundle is
+      // empty — the /api/generate-plan route will degrade to a minimal plan.
+      send({ type: "research-complete", research: research ?? {} });
       controller.close();
     },
   });

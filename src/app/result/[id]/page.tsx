@@ -72,13 +72,6 @@ export default function ResultPage({
     }
   }, []);
 
-  useEffect(() => {
-    if (!plan) {
-      const t = setTimeout(() => router.replace("/plan"), 50);
-      return () => clearTimeout(t);
-    }
-  }, [plan, router]);
-
   const days = useMemo(() => plan?.days ?? [], [plan]);
   const current = days[activeDay];
 
@@ -86,14 +79,21 @@ export default function ResultPage({
     return (
       <>
         <Header />
-        <main className="flex-1 flex items-center justify-center py-24">
-          <div className="text-center">
+        <main className="flex-1 flex items-center justify-center py-24 px-4">
+          <div className="max-w-md rounded-2xl border border-[rgba(212,168,83,0.35)] bg-[rgba(17,24,39,0.55)] p-8 text-center">
             <div className="font-display text-2xl text-text-primary">
-              Plan bulunamadı
+              Plan verisi bulunamadı
             </div>
-            <p className="text-sm text-text-secondary mt-2">
-              /plan sayfasına yönlendiriliyorsunuz...
+            <p className="text-sm text-text-secondary mt-3">
+              Bu plan hafızadan silinmiş olabilir. Yeni bir plan
+              oluşturabilirsiniz.
             </p>
+            <button
+              onClick={() => router.push("/plan")}
+              className="mt-6 rounded-xl border border-[rgba(212,168,83,0.5)] bg-[rgba(212,168,83,0.12)] px-5 py-2 text-sm text-text-primary hover:bg-[rgba(212,168,83,0.2)]"
+            >
+              Yeni plan oluştur
+            </button>
           </div>
         </main>
         <Footer />
@@ -117,7 +117,12 @@ export default function ResultPage({
               role="status"
               className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
             >
-              Plan kısmi içerik içeriyor — RefineChat ile düzenleyebilirsiniz.
+              Plan kısmi içerikle hazırlandı
+              {Array.isArray(plan.partialAgents) && plan.partialAgents.length > 0
+                ? ` — eksik bölümler: ${plan.partialAgents.join(", ")}`
+                : ""}
+              . Eksik bölümleri RefineChat ile düzenleyebilir veya planı
+              yeniden oluşturabilirsiniz.
             </div>
           )}
           <div className="flex justify-end mb-4">

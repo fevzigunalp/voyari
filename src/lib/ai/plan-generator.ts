@@ -296,40 +296,103 @@ export async function runResearch(
   return results;
 }
 
-/** Build a minimal skeletal plan when synthesis fully fails. */
-function buildMinimalPlan(
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Build a minimal skeletal plan when synthesis fully fails.
+ * Salvages any usable research data (route waypoints, countries, weather,
+ * budget, logistics) so the UI has at least stub content per section.
+ */
+export function buildMinimalPlan(
   profile: TravelerProfile,
   research: ResearchResults,
   partialAgents: string[],
 ): TravelPlan {
+  const route = isRecord(research?.route) ? research.route : {};
+  const budget = isRecord(research?.budget) ? research.budget : {};
+  const logistics = isRecord(research?.logistics) ? research.logistics : {};
+  const weatherRaw = isRecord(research?.weather)
+    ? (research.weather as Record<string, unknown>).days
+    : null;
   return {
     id: `plan_${Date.now()}`,
     createdAt: new Date().toISOString(),
     profile,
     route: {
-      totalDistanceKm: 0,
-      totalDrivingHours: 0,
-      countries: [],
-      waypoints: [],
+      totalDistanceKm:
+        typeof route["totalDistanceKm"] === "number"
+          ? (route["totalDistanceKm"] as number)
+          : 0,
+      totalDrivingHours:
+        typeof route["totalDrivingHours"] === "number"
+          ? (route["totalDrivingHours"] as number)
+          : 0,
+      countries: Array.isArray(route["countries"])
+        ? (route["countries"] as TravelPlan["route"]["countries"])
+        : [],
+      waypoints: Array.isArray(route["waypoints"])
+        ? (route["waypoints"] as TravelPlan["route"]["waypoints"])
+        : [],
     },
     days: [],
     budget: {
-      breakdown: [],
-      dailyEstimates: [],
-      totalEstimate: 0,
-      perPersonEstimate: 0,
-      currency: "EUR",
-      savingTips: [],
+      breakdown: Array.isArray(budget["breakdown"])
+        ? (budget["breakdown"] as TravelPlan["budget"]["breakdown"])
+        : [],
+      dailyEstimates: Array.isArray(budget["dailyEstimates"])
+        ? (budget["dailyEstimates"] as TravelPlan["budget"]["dailyEstimates"])
+        : [],
+      totalEstimate:
+        typeof budget["totalEstimate"] === "number"
+          ? (budget["totalEstimate"] as number)
+          : 0,
+      perPersonEstimate:
+        typeof budget["perPersonEstimate"] === "number"
+          ? (budget["perPersonEstimate"] as number)
+          : 0,
+      currency:
+        typeof budget["currency"] === "string"
+          ? (budget["currency"] as string)
+          : "EUR",
+      savingTips: Array.isArray(budget["savingTips"])
+        ? (budget["savingTips"] as string[])
+        : [],
     },
     logistics: {
-      countryRules: [],
-      vehicleChecklist: [],
-      packingList: [],
-      documentChecklist: [],
-      reservationTimeline: [],
-      emergencyContacts: [],
+      countryRules: Array.isArray(logistics["countryRules"])
+        ? (logistics[
+            "countryRules"
+          ] as TravelPlan["logistics"]["countryRules"])
+        : [],
+      vehicleChecklist: Array.isArray(logistics["vehicleChecklist"])
+        ? (logistics[
+            "vehicleChecklist"
+          ] as TravelPlan["logistics"]["vehicleChecklist"])
+        : [],
+      packingList: Array.isArray(logistics["packingList"])
+        ? (logistics["packingList"] as TravelPlan["logistics"]["packingList"])
+        : [],
+      documentChecklist: Array.isArray(logistics["documentChecklist"])
+        ? (logistics[
+            "documentChecklist"
+          ] as TravelPlan["logistics"]["documentChecklist"])
+        : [],
+      reservationTimeline: Array.isArray(logistics["reservationTimeline"])
+        ? (logistics[
+            "reservationTimeline"
+          ] as TravelPlan["logistics"]["reservationTimeline"])
+        : [],
+      emergencyContacts: Array.isArray(logistics["emergencyContacts"])
+        ? (logistics[
+            "emergencyContacts"
+          ] as TravelPlan["logistics"]["emergencyContacts"])
+        : [],
     },
-    weather: [],
+    weather: Array.isArray(weatherRaw)
+      ? (weatherRaw as TravelPlan["weather"])
+      : [],
     narrative: {
       glanceTitle: "Plan İskeleti Hazır",
       emotionalSummary:
@@ -339,9 +402,14 @@ function buildMinimalPlan(
     },
     partial: true,
     partialAgents,
-    // research preserved via research param in caller; not embedded here
-    ...(research ? {} : {}),
   };
+}
+
+/** List research agent ids whose payload was a safe-fallback stub. */
+export function missingAgentSections(research: ResearchResults): string[] {
+  return (Object.keys(research) as ResearchAgentId[]).filter((k) =>
+    isPartial(research[k]),
+  );
 }
 
 /**
@@ -367,6 +435,13 @@ ${JSON.stringify(research, null, 2).slice(0, 40000)}
 id için "plan_${Date.now()}" kullan. createdAt için şimdiki ISO tarih.
 Yalnızca geçerli JSON döndür.`;
 
+  logAi({
+    phase: "start",
+    message: `synthesizer started partialAgents=${partialAgents.join(",")}`,
+  });
+
+  let rawData: unknown = null;
+  let provider: ProviderName | undefined;
   try {
     const result = await generateObject(
       {
@@ -378,31 +453,57 @@ Yalnızca geçerli JSON döndür.`;
       },
       TravelPlanSchema,
     );
-
-    const normalized = normalizePlan(result.data) as unknown as TravelPlan;
-    if (!normalized.id) normalized.id = `plan_${Date.now()}`;
-    if (!normalized.createdAt) normalized.createdAt = new Date().toISOString();
-    if (!normalized.profile) normalized.profile = profile;
-    if (partialAgents.length > 0) {
-      normalized.partial = true;
-      normalized.partialAgents = partialAgents;
-    }
-    logAi({
-      phase: "success",
-      provider: result.provider,
-      message: `synthesizer outcome=success partial=${partialAgents.length > 0} partialAgents=${partialAgents.join(",")}`,
-    });
-    return normalized;
+    rawData = result.data;
+    provider = result.provider;
   } catch (err) {
     const code = classifyError(err);
     console.error(
-      `[voyari.ai] synthesizer failed code=${code}`,
+      `[voyari.ai] synthesizer generateObject failed code=${code}`,
       err instanceof Error ? err.message.slice(0, 240) : String(err),
     );
     logAi({
       phase: "exhausted",
-      message: `synthesizer outcome=fallback code=${code} partial=true`,
+      message: `synthesizer outcome=fallback code=${code} partial=true stage=generate`,
     });
     return buildMinimalPlan(profile, research, partialAgents);
   }
+
+  // Normalize is guaranteed not to throw, but guard anyway.
+  let normalized: TravelPlan;
+  try {
+    normalized = normalizePlan(rawData) as unknown as TravelPlan;
+  } catch (err) {
+    console.error(
+      `[voyari.ai] synthesizer normalize failed`,
+      err instanceof Error ? err.message.slice(0, 240) : String(err),
+    );
+    logAi({
+      phase: "exhausted",
+      message: `synthesizer outcome=fallback stage=normalize partial=true`,
+    });
+    return buildMinimalPlan(profile, research, partialAgents);
+  }
+
+  // Post-normalize integrity: days MUST be an array, shape fields must exist.
+  if (!normalized || typeof normalized !== "object") {
+    logAi({
+      phase: "exhausted",
+      message: `synthesizer outcome=fallback stage=post-normalize reason=not-object partial=true`,
+    });
+    return buildMinimalPlan(profile, research, partialAgents);
+  }
+  if (!Array.isArray(normalized.days)) normalized.days = [];
+  if (!normalized.id) normalized.id = `plan_${Date.now()}`;
+  if (!normalized.createdAt) normalized.createdAt = new Date().toISOString();
+  if (!normalized.profile) normalized.profile = profile;
+  if (partialAgents.length > 0) {
+    normalized.partial = true;
+    normalized.partialAgents = partialAgents;
+  }
+  logAi({
+    phase: "success",
+    provider,
+    message: `synthesizer outcome=success partial=${partialAgents.length > 0} partialAgents=${partialAgents.join(",")} days=${normalized.days.length}`,
+  });
+  return normalized;
 }

@@ -70,14 +70,28 @@ export default function PlanPage() {
           throw new Error(friendly);
         }
         const data = (await res.json()) as {
-          plan: TravelPlan;
+          plan?: TravelPlan;
           partial?: boolean;
+          status?: "complete" | "partial" | "failed";
         };
-        if (!data?.plan?.id) throw new Error("Plan oluşturulamadı");
-        savePlan(data.plan);
+        // Only throw if the server returned no plan body at all OR explicitly
+        // signaled total failure. A partial plan without id → fabricate one.
+        if (!data?.plan || data.status === "failed") {
+          throw new Error("Plan şu an oluşturulamadı, tekrar deneyin.");
+        }
+        const plan = data.plan;
+        if (!plan.id) {
+          plan.id =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `plan_${Date.now()}`;
+        }
+        savePlan(plan);
         const suffix =
-          data.partial || data.plan.partial ? "?partial=1" : "";
-        router.push(`/result/${data.plan.id}${suffix}`);
+          data.partial || data.status === "partial" || plan.partial
+            ? "?partial=1"
+            : "";
+        router.push(`/result/${plan.id}${suffix}`);
       } catch (err) {
         const raw = err instanceof Error ? err.message : "";
         const isNetworky =
