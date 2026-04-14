@@ -54,17 +54,35 @@ export const useElicitationStore = create<ElicitationStoreState>((set) => ({
   answers: {},
   prefilledKeys: [],
   setAnswer: (id, value) =>
-    set((state) => ({ answers: { ...state.answers, [id]: value } })),
+    set((state) => {
+      if (Object.is(state.answers[id], value)) return state;
+      return { answers: { ...state.answers, [id]: value } };
+    }),
   goNext: () =>
-    set((state) => ({
-      currentIndex: Math.min(state.currentIndex + 1, state.history.length),
-    })),
+    set((state) => {
+      const next = Math.min(state.currentIndex + 1, state.history.length);
+      return next === state.currentIndex ? state : { currentIndex: next };
+    }),
   goBack: () =>
-    set((state) => ({
-      currentIndex: Math.max(state.currentIndex - 1, 0),
-    })),
-  setHistory: (history) => set({ history }),
-  setCurrentIndex: (index) => set({ currentIndex: Math.max(0, index) }),
+    set((state) => {
+      const next = Math.max(state.currentIndex - 1, 0);
+      return next === state.currentIndex ? state : { currentIndex: next };
+    }),
+  setHistory: (history) =>
+    set((state) => {
+      if (
+        state.history.length === history.length &&
+        state.history.every((v, i) => v === history[i])
+      ) {
+        return state;
+      }
+      return { history };
+    }),
+  setCurrentIndex: (index) =>
+    set((state) => {
+      const next = Math.max(0, index);
+      return next === state.currentIndex ? state : { currentIndex: next };
+    }),
   hydrateFromIntent: (intent) =>
     set((state) => {
       const next: Record<string, unknown> = { ...state.answers };
